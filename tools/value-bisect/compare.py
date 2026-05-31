@@ -30,7 +30,7 @@ def _split(key):
 
 
 def _parse(tag):
-    """'i:5' -> ('i', 5); 'f:1.5' -> ('f', 1.5); 'b:true' -> ('b', True)."""
+    """'i:5'->('i',5); 'f:1.5'->('f',1.5); 'b:true'->('b',True); 's:hi'->('s','hi')."""
     kind, _, raw = tag.partition(":")
     if kind == "i":
         return ("i", int(raw))
@@ -38,6 +38,8 @@ def _parse(tag):
         return ("f", float(raw))
     if kind == "b":
         return ("b", raw == "true")
+    if kind == "s":
+        return ("s", raw)
     return ("?", raw)
 
 
@@ -49,6 +51,8 @@ def _is_zero(tag):
         return val == 0.0
     if kind == "b":
         return val is False
+    if kind == "s":
+        return val == ""   # Spinel's empty-string init is the string phantom
     return False
 
 
@@ -120,14 +124,26 @@ def main():
         #     clean "0 vs <big>" instead of vanishing.
         candidates = [sh[var]]
         if sh[var] and _is_zero(sh[var][0][1]):
-            candidates.append(sh[var][1:])
-        best = None  # (rank, divergence-tuple-or-None)
+            candidates.append(sh[var][1:])  # drop one leading zero-init phantom
+        # Score each alignment: no-divergence beats any divergence; among
+        # divergences a later first-divergence beats an earlier one, and a
+        # concrete value mismatch beats a "ran out of changes". On a full tie
+        # prefer the phantom-dropped alignment (later in the list) so the
+        # reported Spinel value is the real one, not the zero-init.
+        def _score(d):
+            if d is None:
+                return (2, 0, 0)
+            is_val = 0 if (str(d[1]).startswith("<no more")
+                           or str(d[2]).startswith("<no more")) else 1
+            return (1, d[0], is_val)
+        div = None
+        best_score = None
         for sv in candidates:
-            div = _first_divergence(cv, sv, ftol)
-            rank = float("inf") if div is None else div[0]
-            if best is None or rank > best[0]:
-                best = (rank, div)
-        div = best[1]
+            d = _first_divergence(cv, sv, ftol)
+            sc = _score(d)
+            if best_score is None or sc >= best_score:
+                best_score = sc
+                div = d
         if div is not None:
             idx, ct, st = div[0], div[1], div[2]
             # Locate the oracle entry for execution-order ranking + reporting.

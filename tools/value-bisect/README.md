@@ -19,8 +19,8 @@ program.rb ──┬─► CRuby + TracePoint(:line) ─► per-variable value h
              └─► spinel --debug ─► lldb line-trace of lv_* locals ────────┘
 ```
 
-Both sides emit, for every scalar local, the ordered history of values it takes
-(recorded only when the value changes). The comparator aligns those histories
+Both sides emit, for every scalar or string local, the ordered history of
+values it takes (recorded only when it changes). The comparator aligns them
 **by value sequence** (not by line — the two runtimes attribute a change to
 different lines) and reports the first local whose value diverges: file,
 variable, value on each side, and the source line.
@@ -85,13 +85,18 @@ the negative control (stays in range → exit 0).
 `require_relative`'d file; the harness reports the root cause in
 `compute.rb` first and the corrupted return value in `main.rb` second.
 
-## Scope / limitations (v1)
+## Scope / limitations
 
-- **Scalar locals only** — `mrb_int` / `mrb_float` / `mrb_bool`. Strings,
-  arrays, hashes and user objects are runtime structs behind a pointer; the
-  Spinel side lists them under `skipped_nonscalar` and they aren't compared yet.
-  Formatting them through the runtime's `sp_*_to_s` helpers is the natural
-  follow-up.
+- **Scalars and strings.** `mrb_int` / `mrb_float` / `mrb_bool`, plus `String`
+  locals (Spinel compiles them to `const char *`, read straight from inferior
+  memory — no inferior calls). `examples/string_overflow.rb` shows a string
+  divergence (`x.to_s` of an overflowed int) reported as `s:0` vs the big
+  number. Arrays, hashes, bigints and user objects are still runtime structs
+  behind a pointer; the Spinel side lists them under `skipped_nonscalar` and
+  they aren't compared yet (bigint via `sp_bigint_to_s`, containers via the
+  `sp_json_*` helpers, are the next additions).
+- Strings are compared up to the first NUL (embedded-NUL binary strings are a
+  gap) and capped at 64 KiB.
 - **Per-file, not per-method scoping.** Variables are keyed by `<file>::<var>`,
   so two methods *in the same file* sharing a local name still merge their
   histories. Keying by function would need the Spinel↔CRuby name mapping to

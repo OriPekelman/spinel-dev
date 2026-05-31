@@ -28,10 +28,13 @@ FLOAT_TYPES = {"mrb_float", "double", "float"}
 BOOL_TYPES = {"mrb_bool", "bool", "_Bool"}
 
 MAX_STOPS = 200000  # backstop against a runaway loop in a bad repro
+MAX_STR = 65536     # cap a string read; matches the CRuby side
 
 
-def _scalarize(v):
-    """Return a typed 'tag:value' string for a scalar SBValue, else None."""
+def _format(v, process):
+    """Return a typed 'tag:value' string for a scalar or string SBValue, else
+    None. Strings (Spinel string locals are `const char *` to NUL-terminated
+    bytes) are read straight from inferior memory — no inferior calls."""
     tn = v.GetTypeName()
     if tn in INT_TYPES:
         return "i:%d" % v.GetValueAsSigned()
@@ -44,6 +47,15 @@ def _scalarize(v):
             return "f:%r" % d
         txt = v.GetValue()
         return "f:" + txt if txt else None
+    if tn.replace("const", "").replace(" ", "") == "char*":
+        addr = v.GetValueAsUnsigned()
+        if addr == 0:
+            return "s:"
+        err = lldb.SBError()
+        s = process.ReadCStringFromMemory(addr, MAX_STR, err)
+        if err.Success() and s is not None:
+            return "s:" + s
+        return None
     return None
 
 
@@ -99,7 +111,7 @@ def value_trace(debugger, command, result, internal_dict):
             name = v.GetName()
             if not name or not name.startswith("lv_"):
                 continue
-            tagged = _scalarize(v)
+            tagged = _format(v, process)
             key = fbase + "::" + name[3:]
             if tagged is None:
                 skipped.add(key)
