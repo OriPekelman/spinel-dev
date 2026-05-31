@@ -4,23 +4,26 @@
 # Runs one Ruby program two ways — under CRuby (the oracle) and as a
 # Spinel-compiled --debug binary — capturing the change-history of every
 # scalar local on each side, then reports the first local whose value
-# diverges. That (line, variable) is the likely silent-miscompile site:
+# diverges. That (file, line, variable) is the likely silent-miscompile site:
 # the failure mode spinelgems calls the dangerous one, because "it compiled"
 # != "it works" and nothing else points at where the value went wrong.
+#
+# Multi-file: require_relative'd files are traced too. The set of compiled
+# files is read from the parser's FILE records (which back --debug's
+# multi-file source map) and handed to both sides so they trace the same
+# files and key variables by "<basename>::<var>".
 #
 # Usage:
 #   bisect.sh <program.rb> [-- program-args...]
 #
 # Environment:
 #   SPINEL_DIR           Spinel checkout (default: ~/sites/spinel)
-#   SPINEL_INT_OVERFLOW  raise|wrap|promote (default: raise) — passed to both
-#                        the cc -D switch and matches the wrapper's modes
+#   SPINEL_INT_OVERFLOW  raise|wrap|promote (default: raise)
 #   CC                   C compiler (default: cc)
 #
-# The Spinel build deliberately uses the Ruby interpreter path
-# (ruby spinel_analyze.rb / spinel_codegen.rb) rather than the prebuilt
-# native binaries, so the harness always reflects the current compiler
-# source — and does not depend on a `make` rebuild having happened.
+# The Spinel build uses the Ruby interpreter path (ruby spinel_analyze.rb /
+# spinel_codegen.rb) so the harness always reflects the current compiler
+# source and does not depend on a `make` rebuild.
 
 set -e
 
@@ -58,15 +61,23 @@ trap 'rm -rf "$WORK"' EXIT
 
 echo "bisect: program=$SRC  overflow=$INT_OVERFLOW  spinel=$SPINEL_DIR" >&2
 
+export SPINEL_DEBUG=1
+export SPINEL_INT_OVERFLOW="$INT_OVERFLOW"
+
+# --- Parse first, so the FILE table tells us which files to trace ----------
+"$PARSE_BIN" "$SRC" "$WORK/ast"
+# FILE <id> <escaped-path>; $3 is the escaped path (no spaces). Unescape the
+# couple of characters the parser escapes, then join with ':'.
+SRCS="$(awk '/^FILE /{print $3}' "$WORK/ast" | sed 's/%20/ /g; s/%25/%/g' | paste -sd: -)"
+[ -z "$SRCS" ] && SRCS="$SRC"
+echo "bisect: tracing files: $(printf '%s' "$SRCS" | tr ':' ' ')" >&2
+
 # --- CRuby oracle -----------------------------------------------------------
 echo "bisect: tracing under CRuby..." >&2
-ruby "$HERE/cruby_trace.rb" "$SRC" "$WORK/cruby.json" "$@"
+ruby "$HERE/cruby_trace.rb" "$SRC" "$WORK/cruby.json" "$SRCS" "$@"
 
 # --- Spinel --debug build (explicit Ruby path; mirrors `spinel --debug`) -----
 echo "bisect: compiling with Spinel (--debug)..." >&2
-export SPINEL_DEBUG=1
-export SPINEL_INT_OVERFLOW="$INT_OVERFLOW"
-"$PARSE_BIN" "$SRC" "$WORK/ast"
 ruby "$SPINEL_DIR/spinel_analyze.rb" "$WORK/ast" "$WORK/ir"
 ruby "$SPINEL_DIR/spinel_codegen.rb" "$WORK/ast" "$WORK/ir" "$WORK/out.c"
 $CC -g -O0 -I"$SPINEL_DIR/lib" -I"$SPINEL_DIR/lib/regexp" "$WORK/out.c" \
@@ -74,7 +85,7 @@ $CC -g -O0 -I"$SPINEL_DIR/lib" -I"$SPINEL_DIR/lib/regexp" "$WORK/out.c" \
 
 # --- Spinel trace under lldb ------------------------------------------------
 echo "bisect: tracing the binary under lldb..." >&2
-SP_TRACE_SRC="$SRC" SP_TRACE_OUT="$WORK/spinel.json" \
+SP_TRACE_SRCS="$SRCS" SP_TRACE_OUT="$WORK/spinel.json" \
   lldb -b \
     -o "command script import $HERE/spinel_lldb_trace.py" \
     -o "spinel_value_trace" \

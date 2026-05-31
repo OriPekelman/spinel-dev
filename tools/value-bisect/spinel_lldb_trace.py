@@ -1,14 +1,15 @@
 """Spinel side of the differential value-bisection harness (runs inside lldb).
 
 A Spinel binary compiled with `--debug` carries `#line` directives mapping the
-generated C back to the original .rb plus named `lv_<local>` variables. This
-script drives that binary under lldb: it sets a breakpoint on every source
-line, runs to exit, and at each stop records the change-history of every scalar
-`lv_*` local — the exact same {var: [[line, "tag:value"], ...]} structure the
-CRuby side emits, so `compare.py` can diff the two symmetrically.
+generated C back to the original .rb files (multi-file: across
+require_relative'd sources) plus named `lv_<local>` variables. This script
+drives that binary under lldb: it sets a breakpoint on every source line of
+every compiled file, runs to exit, and at each stop records the change-history
+of every scalar `lv_*` local — keyed by "<basename>::<var>", the same structure
+cruby_trace.rb emits, so compare.py can diff the two symmetrically.
 
 Invoke (from bisect.sh):
-    SP_TRACE_SRC=<program.rb> SP_TRACE_OUT=<out.json> \
+    SP_TRACE_SRCS=<file1.rb:file2.rb:...> SP_TRACE_OUT=<out.json> \
     lldb -b -o 'command script import spinel_lldb_trace.py' \
             -o 'spinel_value_trace' <binary> [-- args...]
 
@@ -47,35 +48,40 @@ def _scalarize(v):
 
 
 def value_trace(debugger, command, result, internal_dict):
-    src = os.environ.get("SP_TRACE_SRC")
+    srcs = os.environ.get("SP_TRACE_SRCS")
     out_path = os.environ.get("SP_TRACE_OUT")
-    if not src or not out_path:
-        result.SetError("SP_TRACE_SRC and SP_TRACE_OUT must be set")
+    if not srcs or not out_path:
+        result.SetError("SP_TRACE_SRCS and SP_TRACE_OUT must be set")
         return
 
-    src_base = os.path.basename(src)
-    with open(src) as f:
-        n_lines = sum(1 for _ in f)
+    files = [s for s in srcs.split(":") if s]
 
     target = debugger.GetSelectedTarget()
     if not target or not target.IsValid():
         result.SetError("no target selected")
         return
 
-    # One breakpoint per source line. Lines with no generated code resolve to
-    # zero locations and are harmless; lldb matches the file by basename.
+    # One breakpoint per source line of every compiled file. Lines with no
+    # generated code resolve to zero locations and are harmless; lldb matches
+    # by basename against the (now multi-file) line table.
     resolved = 0
-    for line in range(1, n_lines + 1):
-        bp = target.BreakpointCreateByLocation(src_base, line)
-        if bp.GetNumLocations() > 0:
-            resolved += 1
+    for src in files:
+        base = os.path.basename(src)
+        try:
+            with open(src) as f:
+                n_lines = sum(1 for _ in f)
+        except OSError:
+            continue
+        for line in range(1, n_lines + 1):
+            bp = target.BreakpointCreateByLocation(base, line)
+            if bp.GetNumLocations() > 0:
+                resolved += 1
 
-    histories = {}      # var -> [[line, tagged_value], ...]
-    last = {}           # var -> last recorded tagged_value
-    skipped = set()     # names seen but non-scalar (reported, not compared)
+    histories = {}      # "<file>::<var>" -> [[line, tagged_value], ...]
+    last = {}
+    skipped = set()
     events = 0
 
-    error = lldb.SBError()
     process = target.LaunchSimple(None, None, os.getcwd())
 
     stops = 0
@@ -85,21 +91,24 @@ def value_trace(debugger, command, result, internal_dict):
             break
         thread = process.GetSelectedThread()
         frame = thread.GetFrameAtIndex(0)
-        line = frame.GetLineEntry().GetLine()
+        le = frame.GetLineEntry()
+        line = le.GetLine()
+        fbase = le.GetFileSpec().GetFilename() or "?"
         events += 1
-        # args=True, locals=True, statics=False, in_scope_only=True
         for v in frame.GetVariables(True, True, False, True):
             name = v.GetName()
             if not name or not name.startswith("lv_"):
                 continue
             tagged = _scalarize(v)
-            key = name[3:]
+            key = fbase + "::" + name[3:]
             if tagged is None:
                 skipped.add(key)
                 continue
             if last.get(key) != tagged:
                 last[key] = tagged
-                histories.setdefault(key, []).append([line, tagged])
+                # [line, value, global-event-seq]; seq is symmetric with the
+                # CRuby side (the comparator ranks by the oracle's seq).
+                histories.setdefault(key, []).append([line, tagged, events])
         process.Continue()
 
     exit_code = -1

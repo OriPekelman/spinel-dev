@@ -21,6 +21,14 @@ def _load(path):
         return json.load(f)
 
 
+def _split(key):
+    """'helper.rb::r' -> ('helper.rb', 'r'); bare key -> ('', key)."""
+    if "::" in key:
+        f, v = key.split("::", 1)
+        return f, v
+    return "", key
+
+
 def _parse(tag):
     """'i:5' -> ('i', 5); 'f:1.5' -> ('f', 1.5); 'b:true' -> ('b', True)."""
     kind, _, raw = tag.partition(":")
@@ -58,6 +66,21 @@ def _eq(a, b, ftol):
     return va == vb
 
 
+def _first_divergence(cv, sv, ftol):
+    """First point cv and sv part. Returns (idx, cruby_tag, spinel_tag) for a
+    value mismatch; if the overlap matches but lengths differ, the divergence
+    is at the end of the overlap (one side kept changing); None if identical."""
+    n = min(len(cv), len(sv))
+    for idx in range(n):
+        if not _eq(cv[idx][1], sv[idx][1], ftol):
+            return (idx, cv[idx][1], sv[idx][1])
+    if len(cv) != len(sv):
+        ct = cv[n][1] if n < len(cv) else "<no more changes>"
+        st = sv[n][1] if n < len(sv) else "<no more changes>"
+        return (n, ct, st)
+    return None
+
+
 def main():
     args = sys.argv[1:]
     ftol = 1e-9
@@ -81,37 +104,41 @@ def main():
     if skipped:
         print("  (Spinel non-scalar locals not compared: %s)" % ", ".join(skipped))
 
-    findings = []  # (line, var, idx, cruby_val, spinel_val)
+    findings = []  # (seq, line, var, idx, cruby_val, spinel_val)
     common = sorted(set(ch) & set(sh))
     for var in common:
-        cv, sv = ch[var], sh[var]
-        # Spinel zero-inits every local at function entry, so a breakpoint on
-        # the assignment line can read the variable *before* it is set — a
-        # phantom leading 0 that CRuby (which skips a still-nil local) never
-        # sees. Drop exactly that single leading zero-init entry, and only when
-        # it disagrees with the oracle's first value (if the real first value
-        # is itself 0, the phantom is indistinguishable and harmless). Values,
-        # not lines, drive alignment: the two runtimes attribute the same
-        # value-change to different lines (CRuby reports it as-of the next line
-        # event, Spinel as-of the breakpoint line).
-        if sv and cv and _is_zero(sv[0][1]) and not _eq(sv[0][1], cv[0][1], ftol):
-            sv = sv[1:]
-        n = min(len(cv), len(sv))
-        for idx in range(n):
-            (cl, ct), (sl, st) = cv[idx], sv[idx]
-            if not _eq(ct, st, ftol):
-                findings.append((cl, var, idx, ct, st))
-                break
-        else:
-            if len(cv) != len(sv):
-                # Histories agreed as far as both went, but one kept changing.
-                longer, val = (("CRuby", cv) if len(cv) > len(sv)
-                               else ("Spinel", sv))
-                extra_line = val[n][0]
-                findings.append((extra_line, var, n,
-                                 "<%s has more changes>" % longer, ""))
+        cv = ch[var]
+        # Spinel zero-inits every local, so its first entry can be a phantom
+        # the oracle never sees — but the phantom's value (0) can also equal a
+        # genuine value, so we can't decide by value alone. Instead try the
+        # alignment with and without a single leading zero-init entry and keep
+        # whichever agrees *longest*; the right one falls out naturally:
+        #   - real overflow (phantom 0 != true first): dropping aligns far ->
+        #     finds the real, late divergence;
+        #   - legit first 0 (i = 0): not dropping aligns perfectly;
+        #   - wrapped result that happens to be 0: not dropping reports the
+        #     clean "0 vs <big>" instead of vanishing.
+        candidates = [sh[var]]
+        if sh[var] and _is_zero(sh[var][0][1]):
+            candidates.append(sh[var][1:])
+        best = None  # (rank, divergence-tuple-or-None)
+        for sv in candidates:
+            div = _first_divergence(cv, sv, ftol)
+            rank = float("inf") if div is None else div[0]
+            if best is None or rank > best[0]:
+                best = (rank, div)
+        div = best[1]
+        if div is not None:
+            idx, ct, st = div[0], div[1], div[2]
+            # Locate the oracle entry for execution-order ranking + reporting.
+            ce = cv[idx] if idx < len(cv) else (cv[-1] if cv else (0, "", 0))
+            seq = ce[2] if len(ce) > 2 else 0
+            findings.append((seq, ce[0], var, idx, ct, st))
 
-    findings.sort(key=lambda t: (t[0], t[1]))
+    # Rank by the oracle's event sequence: the earliest-executing divergence
+    # (the likely root cause) comes first, even if it lives in a callee on a
+    # higher line number than its downstream consequence.
+    findings.sort(key=lambda t: (t[0], t[2]))
 
     only_c = sorted(set(ch) - set(sh))
     only_s = sorted(set(sh) - set(ch))
@@ -123,18 +150,22 @@ def main():
               % (cruby.get("exit"), spinel.get("exit")))
 
     if findings:
-        cl, var, idx, ct, st = findings[0]
-        print("\n[FIRST DIVERGENCE]")
-        print("  variable : %s" % var)
+        seq, cl, var, idx, ct, st = findings[0]
+        fname, vname = _split(var)
+        print("\n[FIRST DIVERGENCE]  (earliest in execution order)")
+        print("  file     : %s" % (fname or "(toplevel)"))
+        print("  variable : %s" % vname)
         print("  line     : %s" % cl)
         print("  change # : %d (of this var's history)" % idx)
         print("  CRuby    : %s" % ct)
         print("  Spinel   : %s" % st)
         if len(findings) > 1:
-            print("\n  other diverging variables:")
-            for cl, var, idx, ct, st in findings[1:]:
-                print("    %s @ line %s: CRuby %s vs Spinel %s"
-                      % (var, cl, ct, st))
+            print("\n  other diverging variables (later in execution):")
+            for seq, cl, var, idx, ct, st in findings[1:]:
+                fname, vname = _split(var)
+                loc = ("%s:%s" % (fname, cl)) if fname else ("line %s" % cl)
+                print("    %s @ %s: CRuby %s vs Spinel %s"
+                      % (vname, loc, ct, st))
     else:
         print("\n[OK] all %d common scalar variables agree across their "
               "full change-histories." % len(common))

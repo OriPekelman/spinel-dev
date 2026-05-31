@@ -7,8 +7,14 @@
 # comparison robust to the two runtimes firing a different *number* of line
 # events for the same control flow.
 #
+# Multi-file: each variable is keyed by "<basename>::<var>", so a `helper.rb`
+# local and a `main.rb` local of the same name don't merge. Only files Spinel
+# actually compiled are traced (passed in as a list); stdlib/gem frames are
+# ignored. (Two methods in the *same* file sharing a local name still merge —
+# a coarser-grained limitation, noted in the README.)
+#
 # Output (JSON): { "exit": <int>, "events": <int>,
-#                  "histories": { "<var>": [[line, "tag:value"], ...], ... } }
+#                  "histories": { "<file>::<var>": [[line, "tag:value"], ...] } }
 #
 # Value encoding is a typed string so the comparator never confuses Ruby's
 # `false == 0` / `0.0 == 0` with a genuine match:
@@ -18,13 +24,29 @@
 # nil locals are skipped: Spinel declares every local up front (zero-init), so
 # a "not yet assigned" nil on the CRuby side has no faithful counterpart.
 #
-# Usage: ruby cruby_trace.rb <program.rb> <out.json> [program args...]
+# Usage: ruby cruby_trace.rb <program.rb> <out.json> <files-colon-list> [args...]
 
 require "json"
 
 target = File.expand_path(ARGV[0])
 out_path = ARGV[1]
-prog_argv = ARGV.length > 2 ? ARGV[2..] : []
+files_arg = ARGV[2] || ""
+prog_argv = ARGV.length > 3 ? ARGV[3..] : []
+
+# Set of canonical paths Spinel compiled (main + every require_relative'd
+# file). Anything outside it — stdlib, gems — is not traced.
+def canon(p)
+  File.realpath(p)
+rescue StandardError
+  File.expand_path(p)
+end
+
+allowed = {}
+allowed[target] = File.basename(target)
+files_arg.split(":").each do |f|
+  next if f.empty?
+  allowed[canon(f)] = File.basename(f)
+end
 
 def scalarize(v)
   if v.is_a?(Integer)
@@ -44,19 +66,20 @@ last = {}
 events = 0
 
 tp = TracePoint.new(:line) do |t|
-  # Only the target file. require_relative'd files execute under their own
-  # path; the Spinel side currently maps everything to the toplevel file
-  # (single-file limitation), so restricting here keeps the two comparable.
-  next unless File.expand_path(t.path) == target
+  base = allowed[canon(t.path)]
+  next if base.nil?
   events += 1
   b = t.binding
   b.local_variables.each do |nm|
     sv = scalarize(b.local_variable_get(nm))
     next if sv.nil?
-    key = nm.to_s
+    key = base + "::" + nm.to_s
     if last[key] != sv
       last[key] = sv
-      histories[key].push([t.lineno, sv])
+ # [line, value, global-event-seq]; the seq lets the comparator rank
+ # divergences by execution order (root cause before its consequences),
+ # which line numbers across files can't express.
+      histories[key].push([t.lineno, sv, events])
     end
   end
 end
@@ -70,8 +93,6 @@ begin
 rescue SystemExit => e
   exit_code = e.status
 rescue Exception => e
-  # A raise on the CRuby side is itself a signal; record it as a sentinel
-  # "exit" so the comparator can note CRuby aborted.
   $stderr.puts "cruby_trace: program raised: #{e.class}: #{e.message}"
   exit_code = 70
 ensure
