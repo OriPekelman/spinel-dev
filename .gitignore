@@ -4,3 +4,5 @@
 *.bundle
 /tmp/
 /scratch/
+__pycache__/
+*.pyc
