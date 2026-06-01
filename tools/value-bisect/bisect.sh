@@ -83,6 +83,17 @@ ruby "$SPINEL_DIR/spinel_codegen.rb" "$WORK/ast" "$WORK/ir" "$WORK/out.c"
 $CC -g -O0 -I"$SPINEL_DIR/lib" -I"$SPINEL_DIR/lib/regexp" "$WORK/out.c" \
     "$SPINEL_DIR/lib/libspinel_rt.a" -lm $OVF_DEF -o "$WORK/bin"
 
+# Reliability guard: SP_GC_ROOT's cleanup attribute + #line make clang emit
+# DWARF where lldb reads a function's locals at their *entry* values, so a heap
+# local (array/hash/object) — and every other local in that same function —
+# can read as its zero-init. Value divergences in such a program may be false
+# positives; warn so they're confirmed against the native run, not trusted.
+if grep -q 'SP_GC_ROOT' "$WORK/out.c" 2>/dev/null; then
+  echo "bisect: ⚠ note: this program has heap-allocated (GC-rooted) locals; under" >&2
+  echo "        -O0+#line, lldb may read locals at their entry values, so a reported" >&2
+  echo "        divergence may be a false positive. Confirm against the native run." >&2
+fi
+
 # --- Spinel trace under lldb ------------------------------------------------
 echo "bisect: tracing the binary under lldb..." >&2
 SP_TRACE_SRCS="$SRCS" SP_TRACE_OUT="$WORK/spinel.json" \

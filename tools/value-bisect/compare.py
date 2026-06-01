@@ -40,6 +40,8 @@ def _parse(tag):
         return ("b", raw == "true")
     if kind == "s":
         return ("s", raw)
+    if kind == "a":
+        return ("a", raw)
     return ("?", raw)
 
 
@@ -53,6 +55,8 @@ def _is_zero(tag):
         return val is False
     if kind == "s":
         return val == ""   # Spinel's empty-string init is the string phantom
+    if kind == "a":
+        return val == "[]"  # Spinel's NULL-array init is the array phantom
     return False
 
 

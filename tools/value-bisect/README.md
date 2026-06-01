@@ -115,14 +115,24 @@ the trace's stop cap before faulting; bounded crashes are caught fast.)
 
 ## Scope / limitations
 
-- **Scalars and strings.** `mrb_int` / `mrb_float` / `mrb_bool`, plus `String`
-  locals (Spinel compiles them to `const char *`, read straight from inferior
-  memory — no inferior calls). `examples/string_overflow.rb` shows a string
-  divergence (`x.to_s` of an overflowed int) reported as `s:0` vs the big
-  number. Arrays, hashes, bigints and user objects are still runtime structs
-  behind a pointer; the Spinel side lists them under `skipped_nonscalar` and
-  they aren't compared yet (bigint via `sp_bigint_to_s`, containers via the
-  `sp_json_*` helpers, are the next additions).
+- **Reliable for value-type locals; unreliable for functions with heap locals.**
+  This is the load-bearing caveat. `mrb_int` / `mrb_float` / `mrb_bool` and
+  `String` (`const char *`) locals read correctly. But a function that
+  GC-roots any pointer local (array / hash / object — `SP_GC_ROOT` in the
+  generated C) hits a clang quirk: the cleanup attribute plus the `#line`
+  directives make lldb read **every** local in that function at its *entry*
+  value (so a scalar derived from an array reads as `0`). That can produce a
+  **false positive**. `bisect.sh` greps the generated C for `SP_GC_ROOT` and
+  prints a warning when a program is affected — confirm any divergence against
+  the native run. Reliable today: scalar-arithmetic code (the overflow class).
+  Open investigation: whether emitting `#line` differently, or dropping the
+  cleanup attribute in `--debug`, restores local visibility.
+- **Bigints** are compared (`sp_Bigint*` → `i:<decimal>` via one
+  `sp_bigint_to_s` call) — e.g. a doubling loop that Spinel auto-promotes
+  matches CRuby's Bignum. **Int/String arrays** have readers
+  (`a:[…]`) but are subject to the heap-local caveat above, so they mostly
+  read as unreadable (skipped, never false-positive). Float arrays, hashes and
+  objects are not compared.
 - Strings are compared up to the first NUL (embedded-NUL binary strings are a
   gap) and capped at 64 KiB.
 - **Per-file, not per-method scoping.** Variables are keyed by `<file>::<var>`,
