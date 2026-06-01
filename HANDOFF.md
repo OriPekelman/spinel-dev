@@ -22,8 +22,8 @@ the load-bearing one is captured below.
 ## Done and validated on gx10 (Linux/aarch64, gcc, lldb-18)
 
 All four roadmap items (`docs/01-debuggability.md`) shipped:
-1. `spinel --debug` — `#line` stepping + native `Exception#backtrace` (backtrace
-   is **macOS-only** so far — see Open #1).
+1. `spinel --debug` — `#line` stepping + native `Exception#backtrace` (now
+   works on **Linux too**, at macOS parity — see Done #1 below).
 2. ruby-lsp addon (`tools/ruby-lsp-spinel`) — inferred type on hover + degrade.
 3. `spinel --emit-rbs` / `--emit-types` — inference as RBS / position JSON.
 4. native backtrace (item above).
@@ -51,22 +51,51 @@ both clang/lldb (macOS) and gcc/gdb (gx10). Implications:
 - `spinel --debug` *stepping* still misreads locals in such functions (`p lv_x`
   over corrupt DWARF). Source stepping/line-table is fine; only values are wrong.
 
-## Open next steps (pick by value)
+## Done this session (gx10, 2026-06-01) — all three prior open items
 
-1. **Native `Exception#backtrace` on Linux** (currently empty). glibc's
-   `backtrace_symbols` uses a different format *and* can't resolve `static`
-   functions. Fix is contained but needs a gx10 fork rebuild: in
-   `lib/sp_runtime.h`'s `sp_bt_symbol`, parse the Linux `module(sym+0xoff)`
-   format; make user methods **non-`static`** in debug (`method_linkage_named` in
-   `spinel_codegen.rb`) and link the debug build with `-rdynamic` so the symbols
-   are resolvable. Then rebuild (`make codegen`) on gx10 and re-test
-   `/tmp/bt.rb --debug`.
-2. **spinelgems `verify` → self-localize.** When the differential smoke diverges,
-   have `spinel-compat verify` call `bisect.sh --json` to upgrade `L2 cruby=…
-   spinel=…` to a variable + line. (spinelgems is at `~/sites/spinelgems`.)
-3. **Validate on `tep` / `toy`** — run the whole battery (`spinel doctor`,
-   harness, `--emit-rbs`) on a real multi-file app. The realistic stress test;
-   surfaces what breaks at scale (multi-file maps, the harness, the LSP).
+1. **Native `Exception#backtrace` on Linux** — DONE (fork `feat/typing`,
+   commit `7976266`). Three coupled changes, all `--debug`-gated:
+   `sp_bt_symbol` now parses the glibc `module(sym+0xoff)` form (empty symbol =
+   unresolved → skip) alongside the macOS form; `method_linkage_named` emits user
+   methods with **external** linkage in debug (was `static` — `static` symbols
+   never reach the dynamic symbol table even under `-rdynamic`); the wrapper
+   links debug builds with `-rdynamic` on non-Darwin. Verified: `Foo#bar →
+   toplevel → <main>` for a raise; ZeroDivisionError drops the `sp_idiv` runtime
+   frame via the denylist; cross-file naming works (`Helper#cls_boom →
+   Helper#cls_risky → driver → <main>`). `make test` = 706 pass / 0 fail.
+2. **spinelgems `verify` → self-localize** — DONE (spinelgems `main`, commit
+   `6ba9533`, **not yet pushed** — default-branch protection; repo was already
+   +37 ahead of origin). New `Bundler::Spinel::Localizer` runs `bisect.sh --json`
+   on the still-on-disk harness when a smoke diverges and appends
+   `localized:<file>:<line> <var> cruby=… spinel=…`. Resolves bisect via
+   `SPINEL_BISECT` › sibling spinel-dev › `~/sites/spinel-dev`; `SPINEL_DIR`
+   points it at the engine; parses stdout (bisect exits 1 on divergence).
+   Verified end-to-end on a `x << 1` overflow gem.
+3. **Validate on `tep`** — DONE. `spinel doctor` + `--emit-rbs`/`--emit-types`
+   ran on the full multi-file framework (40-file `require_relative` chain).
+   Findings below.
+
+## Open next steps (new, from the tep validation + parity gaps)
+
+1. **The differential harness can't run tep-style frameworks.** `lib/tep.rb`
+   raises on `require` under CRuby (AOT-only guard), so doctor's *behavior* leg
+   and `bisect.sh` (which use CRuby as the oracle) report "harness could not run."
+   The *static* legs (compile-probe, inference-degrade, `--emit-rbs`) scale fine.
+   Option: a `--no-cruby`/single-sided mode, or document that differential
+   localization needs a CRuby-runnable entry (most app code is; the framework
+   bootstrap isn't).
+2. **Backtrace cosmetics (parity gap, shared with macOS).** Class methods print
+   as `Helper#cls_boom` (mangled `sp_<Cls>_cls_<m>`) instead of `Helper.boom`,
+   and every frame attributes to the *toplevel* `.rb` (`sp_bt_srcfile` is one
+   path, not per-frame). Both are in the shared `sp_bt_symbol`/`sp_bt_format`;
+   fixing means a `cls_`-aware splitter + per-frame file from the source map.
+3. **tep silent-emit-0 + FFI placeholders (surfaced by the battery).** doctor
+   flagged `delete_at` on `float_array` in `Tep::Llm::OpenAI::Backend#
+   generate_embeddings` → *unresolved call, silently emits 0* (a real miscompile
+   site). Separately, compiling `lib/tep` directly (not via `bin/tep`) leaks the
+   `@TEP_PG_CFLAGS@`/`@TEP_*_O@` ffi placeholders to the linker — expected, but a
+   reminder the battery should drive tep through `bin/tep`, which substitutes
+   them (`spinel-ext.json`). tep inference is healthy: ~26 untyped / 562 methods.
 
 ## Build / rebuild notes
 
