@@ -154,28 +154,50 @@ def value_trace(debugger, command, result, internal_dict):
 
     files = [s for s in srcs.split(":") if s]
 
+    # cmap mode (default from bisect.sh): we trace a #line-free build — because
+    # #line corrupts DWARF local locations — and map each C physical line back
+    # to a Ruby (file, line) via the cmap that bisect.sh derived from the #line
+    # directives. cmap line: "<c_line> <ruby_file> <ruby_line>".
+    cmap = {}      # c_physical_line -> (ruby_basename, ruby_line)
+    cmap_path = os.environ.get("SP_TRACE_CMAP")
+    cfile = os.environ.get("SP_TRACE_CFILE")
+    if cmap_path and cfile:
+        try:
+            with open(cmap_path) as f:
+                for ln in f:
+                    parts = ln.split()
+                    if len(parts) >= 3:
+                        cmap[int(parts[0])] = (os.path.basename(parts[1]), int(parts[2]))
+        except OSError:
+            cmap = {}
+
     target = debugger.GetSelectedTarget()
     if not target or not target.IsValid():
         result.SetError("no target selected")
         return
 
-    # One breakpoint per source line of every compiled file. Lines with no
-    # generated code resolve to zero locations and are harmless; lldb matches
-    # by basename against the (now multi-file) line table.
     resolved = 0
-    max_line = {}   # basename -> source line count (to reject epilogue stops)
-    for src in files:
-        base = os.path.basename(src)
-        try:
-            with open(src) as f:
-                n_lines = sum(1 for _ in f)
-        except OSError:
-            continue
-        max_line[base] = n_lines
-        for line in range(1, n_lines + 1):
-            bp = target.BreakpointCreateByLocation(base, line)
+    max_line = {}   # basename -> source line count (legacy .rb mode only)
+    if cmap:
+        # Breakpoint by the #line-free C file's physical lines that map to Ruby.
+        for cline in cmap:
+            bp = target.BreakpointCreateByLocation(cfile, cline)
             if bp.GetNumLocations() > 0:
                 resolved += 1
+    else:
+        # Legacy: one breakpoint per Ruby source line (kept as a fallback).
+        for src in files:
+            base = os.path.basename(src)
+            try:
+                with open(src) as f:
+                    n_lines = sum(1 for _ in f)
+            except OSError:
+                continue
+            max_line[base] = n_lines
+            for line in range(1, n_lines + 1):
+                bp = target.BreakpointCreateByLocation(base, line)
+                if bp.GetNumLocations() > 0:
+                    resolved += 1
 
     histories = {}      # "<file>::<var>" -> [[line, tagged_value], ...]
     last = {}
@@ -198,31 +220,42 @@ def value_trace(debugger, command, result, internal_dict):
         # (SIGSEGV, SIGABRT, …). Attribute it to the nearest Ruby-source frame
         # so triage points at a .rb line, not runtime C, then stop tracing.
         if reason in (lldb.eStopReasonSignal, lldb.eStopReasonException):
-            cline, cfile = 0, "?"
+            rline, rfile = 0, "?"
             for i in range(thread.GetNumFrames()):
                 fle = thread.GetFrameAtIndex(i).GetLineEntry()
                 fb = fle.GetFileSpec().GetFilename()
-                if fb in src_bases and fle.GetLine() > 0:
-                    cline, cfile = fle.GetLine(), fb
+                gl = fle.GetLine()
+                if cmap:
+                    if fb == cfile and gl in cmap:
+                        rfile, rline = cmap[gl]
+                        break
+                elif fb in src_bases and gl > 0:
+                    rfile, rline = fb, gl
                     break
             crash = {
-                "line": cline,
-                "file": cfile,
+                "line": rline,
+                "file": rfile,
                 "signal": thread.GetStopDescription(128) or "signal",
             }
             break
 
         frame = thread.GetFrameAtIndex(0)
         le = frame.GetLineEntry()
-        line = le.GetLine()
-        fbase = le.GetFileSpec().GetFilename() or "?"
-        # Skip stops at a line past the file's end: a `#line N` directive resets
-        # the counter, so the function epilogue (`return 0; }`) auto-increments
-        # past EOF and lldb reads locals there in a torn/garbage state. Such a
-        # value is not a real source-level observation — ignore it.
-        if line < 1 or line > max_line.get(fbase, 1 << 30):
-            process.Continue()
-            continue
+        gl = le.GetLine()
+        glfile = le.GetFileSpec().GetFilename() or "?"
+        if cmap:
+            # Map the C physical line back to its Ruby position; stops outside
+            # the map (runtime code, epilogue) are not source observations.
+            if glfile != cfile or gl not in cmap:
+                process.Continue()
+                continue
+            fbase, line = cmap[gl]
+        else:
+            line, fbase = gl, glfile
+            # Legacy #line mode: reject stops past EOF (epilogue auto-increment).
+            if line < 1 or line > max_line.get(fbase, 1 << 30):
+                process.Continue()
+                continue
         events += 1
         for v in frame.GetVariables(True, True, False, True):
             name = v.GetName()
@@ -252,7 +285,9 @@ def value_trace(debugger, command, result, internal_dict):
         "exit": exit_code,
         "events": events,
         "resolved_lines": resolved,
-        "skipped_nonscalar": sorted(skipped),
+        # Only report a var as skipped if it NEVER produced a value — a value
+        # read at a dead/uninit stop (None) shouldn't mask one read while live.
+        "skipped_nonscalar": sorted(skipped - set(histories.keys())),
         "crash": crash,
         "histories": histories,
     }

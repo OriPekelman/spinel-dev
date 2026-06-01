@@ -115,24 +115,21 @@ the trace's stop cap before faulting; bounded crashes are caught fast.)
 
 ## Scope / limitations
 
-- **Reliable for value-type locals; unreliable for functions with heap locals.**
-  This is the load-bearing caveat. `mrb_int` / `mrb_float` / `mrb_bool` and
-  `String` (`const char *`) locals read correctly. But a function that
-  GC-roots any pointer local (array / hash / object — `SP_GC_ROOT` in the
-  generated C) hits a clang quirk: the cleanup attribute plus the `#line`
-  directives make lldb read **every** local in that function at its *entry*
-  value (so a scalar derived from an array reads as `0`). That can produce a
-  **false positive**. `bisect.sh` greps the generated C for `SP_GC_ROOT` and
-  prints a warning when a program is affected — confirm any divergence against
-  the native run. Reliable today: scalar-arithmetic code (the overflow class).
-  Open investigation: whether emitting `#line` differently, or dropping the
-  cleanup attribute in `--debug`, restores local visibility.
+- **Heap-local programs now work** (the previous load-bearing caveat is fixed).
+  Background: `#line` directives corrupt clang's DWARF variable-location info, so
+  lldb reads a function's locals from the wrong stack slot whenever it has a
+  GC-rooted (heap) local — every local, including scalars derived from an array,
+  reads as its zero-init. Rather than trace the `#line` build, `bisect.sh`
+  derives a C-line → Ruby-position map from the `#line` directives, blanks them
+  out (preserving line count, so DWARF is clean), traces the resulting binary,
+  and maps each stop back to Ruby. Locals then read correctly. (The shipped
+  `spinel --debug` *stepping* feature still misreads locals in such functions —
+  that's `p lv_x` over corrupt DWARF; documented separately.)
 - **Bigints** are compared (`sp_Bigint*` → `i:<decimal>` via one
   `sp_bigint_to_s` call) — e.g. a doubling loop that Spinel auto-promotes
-  matches CRuby's Bignum. **Int/String arrays** have readers
-  (`a:[…]`) but are subject to the heap-local caveat above, so they mostly
-  read as unreadable (skipped, never false-positive). Float arrays, hashes and
-  objects are not compared.
+  matches CRuby's Bignum. **Int/String arrays** are compared as `a:[…]` (read
+  from the runtime struct). Float arrays, hashes and user objects are not
+  compared yet.
 - Strings are compared up to the first NUL (embedded-NUL binary strings are a
   gap) and capped at 64 KiB.
 - **Per-file, not per-method scoping.** Variables are keyed by `<file>::<var>`,

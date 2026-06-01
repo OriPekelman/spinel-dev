@@ -80,23 +80,39 @@ ruby "$HERE/cruby_trace.rb" "$SRC" "$WORK/cruby.json" "$SRCS" "$@"
 echo "bisect: compiling with Spinel (--debug)..." >&2
 ruby "$SPINEL_DIR/spinel_analyze.rb" "$WORK/ast" "$WORK/ir"
 ruby "$SPINEL_DIR/spinel_codegen.rb" "$WORK/ast" "$WORK/ir" "$WORK/out.c"
-$CC -g -O0 -I"$SPINEL_DIR/lib" -I"$SPINEL_DIR/lib/regexp" "$WORK/out.c" \
-    "$SPINEL_DIR/lib/libspinel_rt.a" -lm $OVF_DEF -o "$WORK/bin"
 
-# Reliability guard: SP_GC_ROOT's cleanup attribute + #line make clang emit
-# DWARF where lldb reads a function's locals at their *entry* values, so a heap
-# local (array/hash/object) — and every other local in that same function —
-# can read as its zero-init. Value divergences in such a program may be false
-# positives; warn so they're confirmed against the native run, not trusted.
-if grep -q 'SP_GC_ROOT' "$WORK/out.c" 2>/dev/null; then
-  echo "bisect: ⚠ note: this program has heap-allocated (GC-rooted) locals; under" >&2
-  echo "        -O0+#line, lldb may read locals at their entry values, so a reported" >&2
-  echo "        divergence may be a false positive. Confirm against the native run." >&2
-fi
+# `#line` directives corrupt clang's DWARF variable-location info, so lldb reads
+# a function's locals from the wrong stack slot (their zero-init) whenever the
+# function has heap/GC-rooted locals — see spinel-line-dwarf-bug. So we DON'T
+# trace the #line build. Instead: derive a C-line -> (ruby file, ruby line) map
+# from the directives, then blank them out (preserving line count, so the C
+# physical lines are stable and the DWARF is clean). We breakpoint by C line and
+# map values back to Ruby positions via the cmap. Locals then read correctly.
+# Each C line maps to the Ruby line of the most recent #line directive — a
+# statement's several C lines all belong to that ONE Ruby line, so do NOT
+# increment. (Epilogue C lines after the last directive map to the last
+# statement's line; their reads agree with it, so they're harmless.)
+awk '
+  /^}/ { armed = 0; next }          # function close: stop mapping until the
+                                     # next function arms via its own #line, so
+                                     # a callees prologue/decls (no #line of
+                                     # their own) do not inherit a stale mapping
+  /^#line / {
+    rl = $2 + 0
+    f = $3; gsub(/"/, "", f)
+    armed = 1; next
+  }
+  { if (armed) print NR, f, rl }
+' "$WORK/out.c" > "$WORK/cmap"
+sed 's/^#line .*//' "$WORK/out.c" > "$WORK/trace.c"
+CFILE="$WORK/trace.c"
+$CC -g -O0 -I"$SPINEL_DIR/lib" -I"$SPINEL_DIR/lib/regexp" "$CFILE" \
+    "$SPINEL_DIR/lib/libspinel_rt.a" -lm $OVF_DEF -o "$WORK/bin"
 
 # --- Spinel trace under lldb ------------------------------------------------
 echo "bisect: tracing the binary under lldb..." >&2
 SP_TRACE_SRCS="$SRCS" SP_TRACE_OUT="$WORK/spinel.json" \
+SP_TRACE_CMAP="$WORK/cmap" SP_TRACE_CFILE="$(basename "$CFILE")" \
   lldb -b \
     -o "command script import $HERE/spinel_lldb_trace.py" \
     -o "spinel_value_trace" \
