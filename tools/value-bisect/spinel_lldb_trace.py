@@ -77,6 +77,7 @@ def value_trace(debugger, command, result, internal_dict):
     # generated code resolve to zero locations and are harmless; lldb matches
     # by basename against the (now multi-file) line table.
     resolved = 0
+    max_line = {}   # basename -> source line count (to reject epilogue stops)
     for src in files:
         base = os.path.basename(src)
         try:
@@ -84,6 +85,7 @@ def value_trace(debugger, command, result, internal_dict):
                 n_lines = sum(1 for _ in f)
         except OSError:
             continue
+        max_line[base] = n_lines
         for line in range(1, n_lines + 1):
             bp = target.BreakpointCreateByLocation(base, line)
             if bp.GetNumLocations() > 0:
@@ -128,6 +130,13 @@ def value_trace(debugger, command, result, internal_dict):
         le = frame.GetLineEntry()
         line = le.GetLine()
         fbase = le.GetFileSpec().GetFilename() or "?"
+        # Skip stops at a line past the file's end: a `#line N` directive resets
+        # the counter, so the function epilogue (`return 0; }`) auto-increments
+        # past EOF and lldb reads locals there in a torn/garbage state. Such a
+        # value is not a real source-level observation — ignore it.
+        if line < 1 or line > max_line.get(fbase, 1 << 30):
+            process.Continue()
+            continue
         events += 1
         for v in frame.GetVariables(True, True, False, True):
             name = v.GetName()
