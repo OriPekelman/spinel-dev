@@ -29,6 +29,15 @@ Sibling projects this repo references:
 | [docs/00-architecture-constraints.md](docs/00-architecture-constraints.md) | The handful of Spinel design facts that govern every answer below. Read first. |
 | [docs/01-debuggability.md](docs/01-debuggability.md) | Can byebug/pry work? An "auto LSP"? What Ruby tooling works today, what's cheap to build, what's structurally impossible. |
 | [docs/02-compile-gems-reverse-cext.md](docs/02-compile-gems-reverse-cext.md) | Could Spinel compile Ruby *into a CRuby C-extension* — "compile gems" while keeping interpreted Ruby as the workhorse? Feasibility, the one hard seam, and the v1 target. |
+| [docs/03-tooling-for-contributors-and-agents.md](docs/03-tooling-for-contributors-and-agents.md) | Operator's manual for the tooling built from doc 01 (debug/#line, value-bisect + triage, RBS/types export, LSP, native backtrace). Proof-of-value runs, the agentic dev loop, and the rationale for upstreaming. |
+| [docs/04-tooling-for-developers.md](docs/04-tooling-for-developers.md) | The gem-author / app-developer how-to: check a binary matches CRuby, debug + backtrace, and read inferred types. |
+| [docs/05-tooling-surfaces-and-roadmap.md](docs/05-tooling-surfaces-and-roadmap.md) | Gap analysis — what surfaces (CI, terminal, IDE/DAP, type-checker, packaging) are still needed to make the capabilities land, with a suggested order. |
+
+The tooling itself lives in [`tools/`](tools/): `tools/value-bisect/`
+(differential value-bisection harness + test-suite triage) and
+`tools/ruby-lsp-spinel/` (the Spinel-aware ruby-lsp addon). The compiler-side
+changes (`--debug`, `--emit-rbs`, `--emit-types`, native backtrace) live on the
+`OriPekelman/spinel` fork, branch `feat/typing`.
 
 ## The one-paragraph summary
 
