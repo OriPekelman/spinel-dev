@@ -85,6 +85,34 @@ the negative control (stays in range → exit 0).
 `require_relative`'d file; the harness reports the root cause in
 `compute.rb` first and the corrupted return value in `main.rb` second.
 
+## Test-suite triage
+
+`triage.sh` wires the harness into Spinel's test suite: instead of "test X
+failed, output differs", it tells you *where* — variable + line for a
+miscompile, file:line + signal for a crash.
+
+```sh
+cd ~/sites/spinel && make test          # writes build/test-results/*.ok
+triage.sh --failing                     # triage every FAIL/ERR
+# or target specific tests:
+triage.sh test/foo.rb test/bar.rb
+```
+
+Each failing test gets one of:
+
+| Verdict | Meaning |
+|---|---|
+| `MISCMP` | a scalar/string local diverges — `var @Lnn  CRuby=…  Spinel=…` |
+| `CRASH`  | Spinel faulted — `file:line  EXC_BAD_ACCESS/SIGSEGV…` |
+| `ABORT`  | Spinel raised/exited nonzero before CRuby's result |
+| `OPAQUE` | output differs but no scalar/string divergence (container/output state, or an -O2-specific bug the -O0 trace doesn't reproduce) |
+| `NOBUILD`| the harness couldn't compile the test |
+
+Crash localization walks to the nearest Ruby-source stack frame, so a fault in
+runtime C is reported at the `.rb` line that reached it. (Crashes that only
+happen after very long execution — e.g. deep-recursion stack overflow — may hit
+the trace's stop cap before faulting; bounded crashes are caught fast.)
+
 ## Scope / limitations
 
 - **Scalars and strings.** `mrb_int` / `mrb_float` / `mrb_bool`, plus `String`

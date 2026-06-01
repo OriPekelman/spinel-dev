@@ -96,12 +96,34 @@ def value_trace(debugger, command, result, internal_dict):
 
     process = target.LaunchSimple(None, None, os.getcwd())
 
+    src_bases = set(os.path.basename(s) for s in files)
+    crash = None  # {line, file, signal} when the program stops on a signal
+
     stops = 0
     while process and process.GetState() == lldb.eStateStopped:
         stops += 1
         if stops > MAX_STOPS:
             break
         thread = process.GetSelectedThread()
+        reason = thread.GetStopReason()
+        # A signal/exception stop that isn't one of our breakpoints is a crash
+        # (SIGSEGV, SIGABRT, …). Attribute it to the nearest Ruby-source frame
+        # so triage points at a .rb line, not runtime C, then stop tracing.
+        if reason in (lldb.eStopReasonSignal, lldb.eStopReasonException):
+            cline, cfile = 0, "?"
+            for i in range(thread.GetNumFrames()):
+                fle = thread.GetFrameAtIndex(i).GetLineEntry()
+                fb = fle.GetFileSpec().GetFilename()
+                if fb in src_bases and fle.GetLine() > 0:
+                    cline, cfile = fle.GetLine(), fb
+                    break
+            crash = {
+                "line": cline,
+                "file": cfile,
+                "signal": thread.GetStopDescription(128) or "signal",
+            }
+            break
+
         frame = thread.GetFrameAtIndex(0)
         le = frame.GetLineEntry()
         line = le.GetLine()
@@ -133,6 +155,7 @@ def value_trace(debugger, command, result, internal_dict):
         "events": events,
         "resolved_lines": resolved,
         "skipped_nonscalar": sorted(skipped),
+        "crash": crash,
         "histories": histories,
     }
     with open(out_path, "w") as f:

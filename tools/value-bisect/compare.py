@@ -159,11 +159,24 @@ def main():
     only_c = sorted(set(ch) - set(sh))
     only_s = sorted(set(sh) - set(ch))
 
-    diverged = bool(findings)
-    if not diverged and cruby.get("exit") != spinel.get("exit"):
-        print("\n[!] exit codes differ (CRuby=%s, Spinel=%s) but no scalar "
-              "divergence found — check non-scalar state or control flow."
-              % (cruby.get("exit"), spinel.get("exit")))
+    crash = spinel.get("crash")
+    spinel_exit = spinel.get("exit")
+    cruby_exit = cruby.get("exit")
+    # Spinel exited nonzero while CRuby didn't: it raised/aborted before
+    # producing CRuby's result. That outranks a value divergence, which here is
+    # usually the zero-init phantom of a variable Spinel never got to assign.
+    aborted = bool(spinel_exit) and spinel_exit > 0 and spinel_exit != cruby_exit
+
+    if crash:
+        where = ("%s:%s" % (crash.get("file"), crash.get("line"))
+                 if crash.get("line") else "an unknown location")
+        print("\n[CRASH] Spinel stopped on a fault at %s\n        %s"
+              % (where, crash.get("signal")))
+    elif aborted:
+        print("\n[ABORT] Spinel exited %s (raised/aborted) where CRuby exited %s "
+              "— it stopped before producing CRuby's result." % (spinel_exit, cruby_exit))
+
+    diverged = bool(findings) or bool(crash) or aborted
 
     if findings:
         seq, cl, var, idx, ct, st = findings[0]
@@ -192,6 +205,22 @@ def main():
             print("  only CRuby tracked (scalar): %s" % ", ".join(only_c))
         if only_s:
             print("  only Spinel tracked (scalar): %s" % ", ".join(only_s))
+
+    # Stable one-line machine verdict (consumed by triage.sh). Pipe-delimited.
+    # Priority: crash > abort > value divergence > bare exit mismatch > ok.
+    if crash:
+        print("VERDICT|crash|%s|%s|%s"
+              % (crash.get("file"), crash.get("line"), crash.get("signal")))
+    elif aborted:
+        print("VERDICT|abort|%s|%s" % (spinel_exit, cruby_exit))
+    elif findings:
+        seq, cl, var, idx, ct, st = findings[0]
+        fname, vname = _split(var)
+        print("VERDICT|diverge|%s|%s|%s|%s|%s" % (fname, vname, cl, ct, st))
+    elif cruby_exit != spinel_exit:
+        print("VERDICT|exit-differ|%s|%s" % (cruby_exit, spinel_exit))
+    else:
+        print("VERDICT|ok")
 
     return 1 if diverged else 0
 
