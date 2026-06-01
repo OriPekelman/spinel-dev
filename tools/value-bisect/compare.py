@@ -96,6 +96,12 @@ def main():
         i = args.index("--float-tol")
         ftol = float(args[i + 1])
         del args[i : i + 2]
+    as_json = "--json" in args
+    if as_json:
+        args.remove("--json")
+    # In --json mode the human report is suppressed; a single JSON object is
+    # printed at the end (for triage / agents / CI).
+    _print = (lambda *a, **k: None) if as_json else print
     cruby_path, spinel_path = args[0], args[1]
 
     cruby = _load(cruby_path)
@@ -103,14 +109,14 @@ def main():
     ch = cruby.get("histories", {})
     sh = spinel.get("histories", {})
 
-    print("== differential value-bisection ==")
-    print("  CRuby : exit=%s, %s line-events, %d scalar vars"
+    _print("== differential value-bisection ==")
+    _print("  CRuby : exit=%s, %s line-events, %d scalar vars"
           % (cruby.get("exit"), cruby.get("events"), len(ch)))
-    print("  Spinel: exit=%s, %s line-events, %d scalar vars"
+    _print("  Spinel: exit=%s, %s line-events, %d scalar vars"
           % (spinel.get("exit"), spinel.get("events"), len(sh)))
     skipped = spinel.get("skipped_nonscalar") or []
     if skipped:
-        print("  (Spinel non-scalar locals not compared: %s)" % ", ".join(skipped))
+        _print("  (Spinel non-scalar locals not compared: %s)" % ", ".join(skipped))
 
     findings = []  # (seq, line, var, idx, cruby_val, spinel_val)
     common = sorted(set(ch) & set(sh))
@@ -174,10 +180,10 @@ def main():
     if crash:
         where = ("%s:%s" % (crash.get("file"), crash.get("line"))
                  if crash.get("line") else "an unknown location")
-        print("\n[CRASH] Spinel stopped on a fault at %s\n        %s"
+        _print("\n[CRASH] Spinel stopped on a fault at %s\n        %s"
               % (where, crash.get("signal")))
     elif aborted:
-        print("\n[ABORT] Spinel exited %s (raised/aborted) where CRuby exited %s "
+        _print("\n[ABORT] Spinel exited %s (raised/aborted) where CRuby exited %s "
               "— it stopped before producing CRuby's result." % (spinel_exit, cruby_exit))
 
     diverged = bool(findings) or bool(crash) or aborted
@@ -185,46 +191,60 @@ def main():
     if findings:
         seq, cl, var, idx, ct, st = findings[0]
         fname, vname = _split(var)
-        print("\n[FIRST DIVERGENCE]  (earliest in execution order)")
-        print("  file     : %s" % (fname or "(toplevel)"))
-        print("  variable : %s" % vname)
-        print("  line     : %s" % cl)
-        print("  change # : %d (of this var's history)" % idx)
-        print("  CRuby    : %s" % ct)
-        print("  Spinel   : %s" % st)
+        _print("\n[FIRST DIVERGENCE]  (earliest in execution order)")
+        _print("  file     : %s" % (fname or "(toplevel)"))
+        _print("  variable : %s" % vname)
+        _print("  line     : %s" % cl)
+        _print("  change # : %d (of this var's history)" % idx)
+        _print("  CRuby    : %s" % ct)
+        _print("  Spinel   : %s" % st)
         if len(findings) > 1:
-            print("\n  other diverging variables (later in execution):")
+            _print("\n  other diverging variables (later in execution):")
             for seq, cl, var, idx, ct, st in findings[1:]:
                 fname, vname = _split(var)
                 loc = ("%s:%s" % (fname, cl)) if fname else ("line %s" % cl)
-                print("    %s @ %s: CRuby %s vs Spinel %s"
+                _print("    %s @ %s: CRuby %s vs Spinel %s"
                       % (vname, loc, ct, st))
     else:
-        print("\n[OK] all %d common scalar variables agree across their "
+        _print("\n[OK] all %d common scalar variables agree across their "
               "full change-histories." % len(common))
 
     if only_c or only_s:
-        print()
+        _print()
         if only_c:
-            print("  only CRuby tracked (scalar): %s" % ", ".join(only_c))
+            _print("  only CRuby tracked (scalar): %s" % ", ".join(only_c))
         if only_s:
-            print("  only Spinel tracked (scalar): %s" % ", ".join(only_s))
+            _print("  only Spinel tracked (scalar): %s" % ", ".join(only_s))
 
-    # Stable one-line machine verdict (consumed by triage.sh). Pipe-delimited.
+    # Stable verdict (one-line pipe form for triage.sh; full object for --json).
     # Priority: crash > abort > value divergence > bare exit mismatch > ok.
+    result = {"cruby_exit": cruby_exit, "spinel_exit": spinel_exit}
     if crash:
-        print("VERDICT|crash|%s|%s|%s"
+        result.update(verdict="crash", file=crash.get("file"),
+                      line=crash.get("line"), signal=crash.get("signal"))
+        _print("VERDICT|crash|%s|%s|%s"
               % (crash.get("file"), crash.get("line"), crash.get("signal")))
     elif aborted:
-        print("VERDICT|abort|%s|%s" % (spinel_exit, cruby_exit))
+        result.update(verdict="abort")
+        _print("VERDICT|abort|%s|%s" % (spinel_exit, cruby_exit))
     elif findings:
         seq, cl, var, idx, ct, st = findings[0]
         fname, vname = _split(var)
-        print("VERDICT|diverge|%s|%s|%s|%s|%s" % (fname, vname, cl, ct, st))
+        result.update(verdict="diverge", file=fname, variable=vname, line=cl,
+                      cruby=ct, spinel=st,
+                      others=[{"file": _split(v)[0], "variable": _split(v)[1],
+                               "line": l, "cruby": c, "spinel": s}
+                              for (_sq, l, v, _i, c, s) in findings[1:]])
+        _print("VERDICT|diverge|%s|%s|%s|%s|%s" % (fname, vname, cl, ct, st))
     elif cruby_exit != spinel_exit:
-        print("VERDICT|exit-differ|%s|%s" % (cruby_exit, spinel_exit))
+        result.update(verdict="exit-differ")
+        _print("VERDICT|exit-differ|%s|%s" % (cruby_exit, spinel_exit))
     else:
-        print("VERDICT|ok")
+        result.update(verdict="ok")
+        _print("VERDICT|ok")
+
+    if as_json:
+        print(json.dumps(result))
 
     return 1 if diverged else 0
 

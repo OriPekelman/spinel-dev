@@ -32,8 +32,10 @@ SPINEL_DIR="${SPINEL_DIR:-$HOME/sites/spinel}"
 CC="${CC:-cc}"
 INT_OVERFLOW="${SPINEL_INT_OVERFLOW:-raise}"
 
+JSON=0
+if [ "$1" = "--json" ]; then JSON=1; shift; fi   # machine-readable verdict
 if [ -z "$1" ]; then
-  echo "usage: bisect.sh <program.rb> [-- program-args...]" >&2
+  echo "usage: bisect.sh [--json] <program.rb> [-- program-args...]" >&2
   exit 2
 fi
 SRC="$1"; shift
@@ -74,7 +76,9 @@ echo "bisect: tracing files: $(printf '%s' "$SRCS" | tr ':' ' ')" >&2
 
 # --- CRuby oracle -----------------------------------------------------------
 echo "bisect: tracing under CRuby..." >&2
-ruby "$HERE/cruby_trace.rb" "$SRC" "$WORK/cruby.json" "$SRCS" "$@"
+# The traced program's own stdout (its puts output) is irrelevant — we compare
+# values, not output — and would pollute --json. Drop it; the trace goes to a file.
+ruby "$HERE/cruby_trace.rb" "$SRC" "$WORK/cruby.json" "$SRCS" "$@" >/dev/null
 
 # --- Spinel --debug build (explicit Ruby path; mirrors `spinel --debug`) -----
 echo "bisect: compiling with Spinel (--debug)..." >&2
@@ -120,5 +124,9 @@ SP_TRACE_CMAP="$WORK/cmap" SP_TRACE_CFILE="$(basename "$CFILE")" \
       echo "bisect: lldb run failed:" >&2; cat "$WORK/lldb.err" >&2; exit 1; }
 
 # --- Compare ----------------------------------------------------------------
-echo >&2
-python3 "$HERE/compare.py" "$WORK/cruby.json" "$WORK/spinel.json"
+if [ "$JSON" -eq 1 ]; then
+  python3 "$HERE/compare.py" "$WORK/cruby.json" "$WORK/spinel.json" --json
+else
+  echo >&2
+  python3 "$HERE/compare.py" "$WORK/cruby.json" "$WORK/spinel.json"
+fi
