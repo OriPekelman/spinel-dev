@@ -78,7 +78,7 @@ fi
 # Overall verdict.
 OVERALL="clean"
 if [ "$N_UNRESOLVED" -gt 0 ] || [ "$N_DEGRADED" -gt 0 ]; then OVERALL="degrades"; fi
-if [ "$BEHAVIOR" = "diverge" ] || [ "$BEHAVIOR" = "crash" ] || [ "$BEHAVIOR" = "abort" ]; then OVERALL="miscompiles"; fi
+if [ "$BEHAVIOR" = "diverge" ] || [ "$BEHAVIOR" = "crash" ] || [ "$BEHAVIOR" = "abort" ] || [ "$BEHAVIOR" = "output-differ" ]; then OVERALL="miscompiles"; fi
 
 if [ "$JSON" -eq 1 ]; then
   python3 - "$SRC" "$OVERALL" "$N_UNRESOLVED" "$N_DEGRADED" "$N_UNTYPED" "$BEHAVIOR" "$WORK/cc.out" "$WORK/x.rbs" "$BEHAVIOR_JSON" <<'PY'
@@ -112,6 +112,7 @@ fi
 case "$BEHAVIOR" in
   ok)          printf '  behavior   ✓ matches CRuby (value-bisection)\n' ;;
   diverge)     printf '  behavior   ✗ MISCOMPILE — diverges from CRuby (run bisect.sh for the site)\n' ;;
+  output-differ) printf '  behavior   ✗ MISCOMPILE — stdout differs from CRuby (no scalar local pinned; run bisect.sh)\n' ;;
   ran)         printf '  behavior   ~ ran clean under Spinel, but no CRuby oracle (single-sided — values unchecked)\n' ;;
   crash)       printf '  behavior   ✗ CRASH under the harness\n' ;;
   abort)       printf '  behavior   ✗ Spinel raised/aborted before CRuby'\''s result\n' ;;

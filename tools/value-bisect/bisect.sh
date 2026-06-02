@@ -150,6 +150,15 @@ $CC -g -O0 -I"$SPINEL_DIR/lib" -I"$SPINEL_DIR/lib/regexp" $FFI_CFLAGS "$CFILE" \
       grep -iE "error|undefined|placeholder|@[A-Z_]+@" "$WORK/cc.err" | head -5 >&2
       exit 1; }
 
+# Capture the binary's own stdout for the output-diff fallback: when no local
+# diverges but the program's output does (a divergent method return consumed
+# straight by `puts`), compare.py reports output-differ instead of a false ok.
+# Oracle mode only (no CRuby stdout to compare against under --no-cruby).
+SP_STDOUT="$WORK/spinel.stdout"
+if [ "$NOCRUBY" -eq 0 ]; then
+  "$WORK/bin" "$@" > "$SP_STDOUT" 2>/dev/null || true
+fi
+
 # --- Spinel trace under lldb ------------------------------------------------
 echo "bisect: tracing the binary under lldb..." >&2
 SP_TRACE_SRCS="$SRCS" SP_TRACE_OUT="$WORK/spinel.json" \
@@ -161,11 +170,15 @@ SP_TRACE_CMAP="$WORK/cmap" SP_TRACE_CFILE="$(basename "$CFILE")" \
       echo "bisect: lldb run failed:" >&2; cat "$WORK/lldb.err" >&2; exit 1; }
 
 # --- Compare (or single-sided report when there's no oracle) ----------------
-NO_ORACLE_FLAG=""
-[ "$NOCRUBY" -eq 1 ] && NO_ORACLE_FLAG="--no-oracle"
+CMP_FLAGS=""
+if [ "$NOCRUBY" -eq 1 ]; then
+  CMP_FLAGS="--no-oracle"
+else
+  CMP_FLAGS="--spinel-stdout $SP_STDOUT"
+fi
 if [ "$JSON" -eq 1 ]; then
-  python3 "$HERE/compare.py" "$WORK/cruby.json" "$WORK/spinel.json" $NO_ORACLE_FLAG --json
+  python3 "$HERE/compare.py" "$WORK/cruby.json" "$WORK/spinel.json" $CMP_FLAGS --json
 else
   echo >&2
-  python3 "$HERE/compare.py" "$WORK/cruby.json" "$WORK/spinel.json" $NO_ORACLE_FLAG
+  python3 "$HERE/compare.py" "$WORK/cruby.json" "$WORK/spinel.json" $CMP_FLAGS
 fi

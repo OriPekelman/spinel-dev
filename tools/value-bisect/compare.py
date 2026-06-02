@@ -102,6 +102,11 @@ def main():
     no_oracle = "--no-oracle" in args
     if no_oracle:
         args.remove("--no-oracle")
+    spinel_stdout_path = None
+    if "--spinel-stdout" in args:
+        i = args.index("--spinel-stdout")
+        spinel_stdout_path = args[i + 1]
+        del args[i : i + 2]
     # In --json mode the human report is suppressed; a single JSON object is
     # printed at the end (for triage / agents / CI).
     _print = (lambda *a, **k: None) if as_json else print
@@ -218,7 +223,32 @@ def main():
         _print("\n[ABORT] Spinel exited %s (raised/aborted) where CRuby exited %s "
               "— it stopped before producing CRuby's result." % (spinel_exit, cruby_exit))
 
-    diverged = bool(findings) or bool(crash) or aborted
+    # Output-diff fallback: when no scalar local diverges, the bug may still show
+    # in the program's stdout (a divergent method return consumed straight by
+    # `puts`, or a value of a type the tracer doesn't model). Coarse — no
+    # variable, just the first differing output line — but never a false ok.
+    out_differ = None
+    if spinel_stdout_path is not None and not findings and not crash and not aborted:
+        cruby_out = cruby.get("stdout") or ""
+        try:
+            with open(spinel_stdout_path, errors="replace") as f:
+                spinel_out = f.read()
+        except OSError:
+            spinel_out = ""
+        if cruby_out != spinel_out:
+            cl = cruby_out.splitlines()
+            sl = spinel_out.splitlines()
+            detail = "len %d!=%d" % (len(cl), len(sl))
+            for i in range(max(len(cl), len(sl))):
+                a = cl[i] if i < len(cl) else "<none>"
+                b = sl[i] if i < len(sl) else "<none>"
+                if a != b:
+                    detail = "L%d cruby=%r spinel=%r" % (i + 1, a, b)
+                    break
+            out_differ = detail
+            _print("\n[OUTPUT] stdout differs (no scalar local diverged): %s" % detail)
+
+    diverged = bool(findings) or bool(crash) or aborted or bool(out_differ)
 
     if findings:
         seq, cl, var, idx, ct, st = findings[0]
@@ -268,6 +298,9 @@ def main():
                                "line": l, "cruby": c, "spinel": s}
                               for (_sq, l, v, _i, c, s) in findings[1:]])
         _print("VERDICT|diverge|%s|%s|%s|%s|%s" % (fname, vname, cl, ct, st))
+    elif out_differ:
+        result.update(verdict="output-differ", detail=out_differ)
+        _print("VERDICT|output-differ|%s" % out_differ)
     elif cruby_exit != spinel_exit:
         result.update(verdict="exit-differ")
         _print("VERDICT|exit-differ|%s|%s" % (cruby_exit, spinel_exit))

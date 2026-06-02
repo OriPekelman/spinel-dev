@@ -141,6 +141,15 @@ the trace's stop cap before faulting; bounded crashes are caught fast.)
   and maps each stop back to Ruby. Locals then read correctly. (The shipped
   `spinel --debug` *stepping* feature still misreads locals in such functions —
   that's `p lv_x` over corrupt DWARF; documented separately.)
+- **Rational / Complex** locals are tagged `rat:<n>/<d>` / `cpx:…` (Spinel has no
+  such type — it silently yields an int like `0`), so e.g. `2 ** -1` (CRuby
+  `1/2`, Spinel `0`) localizes instead of being skipped as a one-sided var.
+- **Output-diff fallback.** When no scalar local diverges, the two runtimes'
+  *stdout* is compared too — a divergent method return consumed straight by
+  `puts foo(x)` has no local to trace, but the output still differs. Verdict
+  `output-differ` (with the first differing line), so a real miscompile is never
+  reported as a false `ok`. (Coarse — no variable; for the precise site the value
+  must land in a local.)
 - **Bigints** are compared (`sp_Bigint*` → `i:<decimal>` via one
   `sp_bigint_to_s` call) — e.g. a doubling loop that Spinel auto-promotes
   matches CRuby's Bignum. **Arrays** (`a:[…]`) and **typed hashes** (`h:{…}`,
