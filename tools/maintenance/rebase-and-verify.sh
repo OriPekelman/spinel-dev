@@ -24,7 +24,11 @@ set -eu
 FORK_DIR="${FORK_DIR:-$HOME/sites/spinel}"
 BRANCH="${BRANCH:-feat/typing}"
 UPSTREAM_REMOTE="${UPSTREAM_REMOTE:-origin}"     # = matz/spinel
-PUSH_REMOTE="${PUSH_REMOTE:-ori}"                # = OriPekelman/spinel
+PUSH_REMOTE="${PUSH_REMOTE:-fork}"               # = OriPekelman/spinel via SSH.
+# NB: use the SSH remote, not the HTTPS/OAuth one (`ori`): when a rebase pulls in
+# upstream .github/workflows/*.yml changes, an OAuth token without `workflow`
+# scope is refused ("refusing to allow an OAuth App to ... workflow"). SSH has no
+# such restriction.
 WORKTREE="${WORKTREE:-/srv/data/scratch/spinel-rebase}"
 SPINEL_DEV="${SPINEL_DEV:-$HOME/sites/spinel-dev}"
 DO_PUSH=0
