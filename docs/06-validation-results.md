@@ -78,6 +78,41 @@ the same wall as tep — see "limitation" below.
    non-nullable types are invisible to all four tools — see the matz/spinel#1259
    localization, which needed ASAN.
 
+## Experiment ③ — all tools on real issues (spinel / spinelgems)
+
+Ran the battery against real surveyed gem miscompiles and an open compiler bug, to
+learn what the tools actually catch before proposing them upstream.
+
+**value-bisect on surveyed `rejected:miscompile` gems** (with the container +
+oracle-parity fixes):
+
+| gem | result | note |
+|---|---|---|
+| `a_vs_an` | ✅ localized | `article` → `i:0` vs `s:a` (oracle-parity fix unblocked it) |
+| `abbrev` | ✅ localized | `word@83` → `s:car` vs `i:0` — a Hash-iteration miscompile |
+| `bmp` | ✅ localized | `label@41` — string divergence |
+| `classnames`, `call_with_params`, `cacert` | ✗ `ok` | divergence is a method **return consumed directly by `puts`** — no local to trace |
+| `afm` | — | unresolved `unpack1`-on-int / `[]`-on-poly (doctor's territory) |
+
+**Two reach limits found, both cheap to close:**
+- **Unstored returns.** value-bisect traces *locals*; `puts method(args)` hides the
+  divergent value. Fix: wrap top-level `puts <expr>` into a temp local, and/or add a
+  coarse **stdout-diff fallback** (both runtimes' output is already produced).
+- **Unmodeled types.** matz/spinel#1220 (`2 ** -1` → CRuby `1/2` Rational vs Spinel
+  `0`) is missed by **every** tool: value-bisect doesn't scalarize `Rational`
+  (CRuby side untraced → one-sided → `ok`), and doctor sees a resolved int method
+  returning int → `clean`. Fix: add `Rational`/`Complex` to the tracer.
+
+**Complementarity confirmed.** On `classnames`, value-bisect says `ok` but doctor's
+compile-probe flags `cannot resolve call to 'classnames' (emitting 0) → degrades`.
+doctor (static) catches unresolved-call emit-0s regardless of value flow;
+value-bisect catches silent miscompiles that land in locals. The right product runs
+both — which `doctor` already does.
+
+**Net for the upstream PR:** the tools localize real miscompiles today, and two
+small tracer enhancements (return-value/stdout coverage; Rational/Complex) would
+materially widen value-bisect's reach. See spinel-dev#4.
+
 ## Open issues spawned
 
 - spinel-dev#1 — differential harness can't run CRuby-refusing/ FFI apps (now
