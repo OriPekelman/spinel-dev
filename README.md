@@ -6,11 +6,13 @@ that motivated it.
 
 > **Status.** This repo began as analysis — *can Ruby tooling work at all against
 > a closed-world, no-VM, no-`eval` compiler?* That question is now answered by
-> **working tools**, below. The design docs remain as the rationale and the
-> open-discussion surface; treat them as RFCs. The compiler-side changes the
-> tools depend on live on the [`OriPekelman/spinel`](https://github.com/OriPekelman/spinel)
-> fork, branch `feat/typing` — all opt-in / `--debug`-gated, non-debug output
-> byte-for-byte unchanged.
+> **working tools**, below, and the compiler-side hooks they need are **landing
+> upstream** in [`matz/spinel`](https://github.com/matz/spinel) one PR at a time
+> (`--emit-rbs` merged; `--debug` in review — see [Compiler surfaces](#compiler-surfaces-upstreaming)).
+> The rest stage on the [`OriPekelman/spinel`](https://github.com/OriPekelman/spinel)
+> fork (branch `feat/typing`) until their turn. Everything is opt-in / debug-gated;
+> non-debug release output is byte-for-byte unchanged. The design docs remain as
+> the rationale and open-discussion surface — treat them as RFCs.
 
 ## The tools
 
@@ -44,14 +46,22 @@ A ruby-lsp addon that surfaces Spinel's per-node type inference on hover, and
 flags where a type degraded to the boxed poly slow path — directly attacking the
 silent-miscompile problem at authoring time.
 
-### Compiler flags (fork `feat/typing`)
+### Compiler surfaces (upstreaming)
 
-- **`spinel --debug`** — `#line` directives for native-debugger (lldb/gdb)
-  stepping through Ruby source, non-inlined methods, and native
-  `Exception#backtrace` / `Kernel#caller` (macOS and Linux).
+The tools rely on a few opt-in, output-neutral compiler hooks. They're landing
+in `matz/spinel` one reviewable PR at a time; until each lands it stages on the
+`feat/typing` fork.
+
 - **`spinel --emit-rbs`** — whole-program inference exported as RBS signatures.
+  ✅ **Merged** ([matz/spinel#1276](https://github.com/matz/spinel/pull/1276)).
+- **`spinel --debug` / `-g`** — `#line` directives for native-debugger (lldb/gdb)
+  stepping through Ruby source + non-inlined methods. 🔵 **In review**
+  ([matz/spinel#1292](https://github.com/matz/spinel/pull/1292)).
 - **`spinel --emit-types`** — the same inference as position-keyed JSON (what the
-  LSP consumes).
+  LSP consumes). 🟡 **Queued** behind `--debug`.
+- **native `Exception#backtrace` / `Kernel#caller`** (macOS + Linux) and a
+  debug-only **null-receiver guard** (`NoMethodError` instead of a silent NULL
+  deref). On the fork, queued behind `--debug`.
 
 ## Design docs (RFC / discussion)
 
@@ -77,7 +87,8 @@ silent-miscompile problem at authoring time.
 - **[tep](https://github.com/OriPekelman/tep)** — Sinatra-flavoured web framework
   compiled through Spinel; the largest real-world Spinel app and a codegen
   torture test.
-- **toy** — pure-Ruby ML framework compiled by Spinel (Tep's downstream consumer).
+- **[toy](https://github.com/OriPekelman/toy)** — pure-Ruby ML framework compiled
+  by Spinel (Tep's downstream consumer).
 
 ## What Spinel needs to make this work (high-level)
 

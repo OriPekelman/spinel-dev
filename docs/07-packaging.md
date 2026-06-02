@@ -14,7 +14,8 @@ Two layers, two destinations:
 - **Compiler features → `matz/spinel`** (not gems): `--debug`/`#line` stepping,
   `--emit-rbs`, `--emit-types`, native `Exception#backtrace`. These are
   observability hooks *inside* the compiler; they belong upstream, opt-in and
-  output-neutral. (Roadmap F1.)
+  output-neutral. (Roadmap F1 — underway: `--emit-rbs` merged in
+  matz/spinel#1276, `--debug` in review #1292.)
 - **Harness → gems**: the tools that *consume* those hooks — the LSP addon, the
   differential bisector, the one-shot doctor. These are what we package.
 
