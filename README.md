@@ -63,6 +63,7 @@ silent-miscompile problem at authoring time.
 | [03-tooling-for-contributors-and-agents](docs/03-tooling-for-contributors-and-agents.md) | Operator's manual for the tools above: proof-of-value runs, the agentic dev loop, the upstreaming rationale. |
 | [04-tooling-for-developers](docs/04-tooling-for-developers.md) | Gem-author / app-developer how-to: check a binary matches CRuby, debug + backtrace, read inferred types. |
 | [05-tooling-surfaces-and-roadmap](docs/05-tooling-surfaces-and-roadmap.md) | Gap analysis — which surfaces (CI, terminal, IDE/DAP, type-checker, packaging) are still needed, in suggested order. |
+| [06-validation-results](docs/06-validation-results.md) | Evidence the tools are valuable: `--emit-rbs` vs tep's authored RBS (~73% agreement), `doctor` on toy (real emit-0 + degrades), and the limitations both expose. |
 
 ## Sibling projects
 
