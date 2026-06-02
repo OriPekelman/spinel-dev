@@ -45,10 +45,26 @@ Alignment is robust to:
 ## Usage
 
 ```sh
-./bisect.sh path/to/program.rb [-- program args...]
+./bisect.sh [--json] [--no-cruby] path/to/program.rb [-- program args...]
 ```
 
 Exit status: **0** = all common scalars agree, **1** = a divergence was found.
+
+### Single-sided mode (`--no-cruby`)
+
+Some real programs can't run under CRuby at all — FFI apps (`ffi_lib` is undefined
+in plain Ruby) and AOT-only frameworks (tep raises on `require`). With no oracle
+there's nothing to diff, but the Spinel side is still worth tracing: `--no-cruby`
+skips the CRuby leg and reports `crash` (localized to a `.rb` line) or `ran`
+(clean, exit code) from the compiled binary alone. This is also **auto-detected**
+— if the program raises immediately under CRuby (exit 70), bisect falls back to
+single-sided on its own rather than emit a misleading `exit-differ`.
+
+Caveat: a program that *calls into FFI* must still link its C objects. bisect now
+scrapes the codegen's `SPINEL_LINK`/`SPINEL_CFLAGS` markers, so it links when
+those resolve — but a marker left as an unsubstituted `@PLACEHOLDER@` (e.g. tep's
+`@TEP_SPHTTP_O@`) won't build; run such apps with their placeholders substituted
+(their own build, or a vendored copy).
 
 Environment:
 - `SPINEL_DIR` — Spinel checkout (default `~/sites/spinel`)

@@ -33,9 +33,18 @@ CC="${CC:-cc}"
 INT_OVERFLOW="${SPINEL_INT_OVERFLOW:-raise}"
 
 JSON=0
-if [ "$1" = "--json" ]; then JSON=1; shift; fi   # machine-readable verdict
+NOCRUBY=0          # single-sided: skip the CRuby oracle (for FFI/AOT-only apps
+                   # that can't run under CRuby — tep, toy). No divergence verdict;
+                   # still gives crash localization + the Spinel-side value trace.
+while :; do
+  case "$1" in
+    --json)     JSON=1; shift ;;       # machine-readable verdict
+    --no-cruby) NOCRUBY=1; shift ;;    # explicit single-sided mode
+    *) break ;;
+  esac
+done
 if [ -z "$1" ]; then
-  echo "usage: bisect.sh [--json] <program.rb> [-- program-args...]" >&2
+  echo "usage: bisect.sh [--json] [--no-cruby] <program.rb> [-- program-args...]" >&2
   exit 2
 fi
 SRC="$1"; shift
@@ -75,10 +84,28 @@ SRCS="$(awk '/^FILE /{print $3}' "$WORK/ast" | sed 's/%20/ /g; s/%25/%/g' | past
 echo "bisect: tracing files: $(printf '%s' "$SRCS" | tr ':' ' ')" >&2
 
 # --- CRuby oracle -----------------------------------------------------------
-echo "bisect: tracing under CRuby..." >&2
-# The traced program's own stdout (its puts output) is irrelevant — we compare
-# values, not output — and would pollute --json. Drop it; the trace goes to a file.
-ruby "$HERE/cruby_trace.rb" "$SRC" "$WORK/cruby.json" "$SRCS" "$@" >/dev/null
+# Single-sided when --no-cruby, or auto when the program can't run under CRuby
+# (FFI / AOT-only frameworks: a plain `ruby <file>` raises at require). Without an
+# oracle there's no divergence check, but the Spinel-side trace still localizes a
+# crash and dumps the computed values.
+if [ "$NOCRUBY" -eq 0 ]; then
+  echo "bisect: tracing under CRuby..." >&2
+  # The traced program's own stdout (its puts output) is irrelevant — we compare
+  # values, not output — and would pollute --json. Drop it; the trace goes to a file.
+  ruby "$HERE/cruby_trace.rb" "$SRC" "$WORK/cruby.json" "$SRCS" "$@" >/dev/null
+  # Auto-fallback: cruby_trace records the program's own exit in the JSON; 70 is
+  # its sentinel for "raised an exception". An immediate raise (e.g. `ffi_lib`
+  # undefined, or an AOT-only `require` guard) means there's no usable oracle —
+  # switch to single-sided rather than emit a misleading exit-differ.
+  CEXIT=$(awk -F'"exit":' 'NR==1{split($2,a,",");print a[1]+0}' "$WORK/cruby.json" 2>/dev/null)
+  if [ "$CEXIT" = "70" ]; then
+    echo "bisect: program does not run under CRuby (raised) — no oracle; single-sided." >&2
+    NOCRUBY=1
+  fi
+fi
+if [ "$NOCRUBY" -eq 1 ]; then
+  printf '{"exit":null,"events":0,"histories":{},"no_oracle":true}' > "$WORK/cruby.json"
+fi
 
 # --- Spinel --debug build (explicit Ruby path; mirrors `spinel --debug`) -----
 echo "bisect: compiling with Spinel (--debug)..." >&2
@@ -110,8 +137,18 @@ awk '
 ' "$WORK/out.c" > "$WORK/cmap"
 sed 's/^#line .*//' "$WORK/out.c" > "$WORK/trace.c"
 CFILE="$WORK/trace.c"
-$CC -g -O0 -I"$SPINEL_DIR/lib" -I"$SPINEL_DIR/lib/regexp" "$CFILE" \
-    "$SPINEL_DIR/lib/libspinel_rt.a" -lm $OVF_DEF -o "$WORK/bin"
+# Scrape the codegen's FFI markers (same as the `spinel` wrapper) so a program
+# that calls into an ffi_lib / ffi_func actually links — without this the harness
+# can only build FFI-free programs. Markers with an unresolved @PLACEHOLDER@
+# (e.g. tep's @TEP_SPHTTP_O@) still fail to link: build such apps with their
+# placeholders substituted (their own build, or a vendored copy).
+FFI_LINKS=$(sed -n 's|^/\* SPINEL_LINK: \(.*\) \*/$|\1|p' "$WORK/out.c" | tr '\n' ' ')
+FFI_CFLAGS=$(sed -n 's|^/\* SPINEL_CFLAGS: \(.*\) \*/$|\1|p' "$WORK/out.c" | tr '\n' ' ')
+$CC -g -O0 -I"$SPINEL_DIR/lib" -I"$SPINEL_DIR/lib/regexp" $FFI_CFLAGS "$CFILE" \
+    "$SPINEL_DIR/lib/libspinel_rt.a" -lm $OVF_DEF $FFI_LINKS -o "$WORK/bin" 2>"$WORK/cc.err" || {
+      echo "bisect: C build failed (FFI markers unresolved? see below):" >&2
+      grep -iE "error|undefined|placeholder|@[A-Z_]+@" "$WORK/cc.err" | head -5 >&2
+      exit 1; }
 
 # --- Spinel trace under lldb ------------------------------------------------
 echo "bisect: tracing the binary under lldb..." >&2
@@ -123,10 +160,12 @@ SP_TRACE_CMAP="$WORK/cmap" SP_TRACE_CFILE="$(basename "$CFILE")" \
     "$WORK/bin" -- "$@" >/dev/null 2>"$WORK/lldb.err" || {
       echo "bisect: lldb run failed:" >&2; cat "$WORK/lldb.err" >&2; exit 1; }
 
-# --- Compare ----------------------------------------------------------------
+# --- Compare (or single-sided report when there's no oracle) ----------------
+NO_ORACLE_FLAG=""
+[ "$NOCRUBY" -eq 1 ] && NO_ORACLE_FLAG="--no-oracle"
 if [ "$JSON" -eq 1 ]; then
-  python3 "$HERE/compare.py" "$WORK/cruby.json" "$WORK/spinel.json" --json
+  python3 "$HERE/compare.py" "$WORK/cruby.json" "$WORK/spinel.json" $NO_ORACLE_FLAG --json
 else
   echo >&2
-  python3 "$HERE/compare.py" "$WORK/cruby.json" "$WORK/spinel.json"
+  python3 "$HERE/compare.py" "$WORK/cruby.json" "$WORK/spinel.json" $NO_ORACLE_FLAG
 fi

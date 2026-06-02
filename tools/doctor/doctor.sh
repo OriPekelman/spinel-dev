@@ -12,7 +12,12 @@
 #                        miscompiles emit no warning, so only this catches them.)
 #
 # Usage:
-#   doctor.sh [--json] [--no-bisect] <program.rb> [-- program-args...]
+#   doctor.sh [--json] [--no-bisect] [--no-cruby] <program.rb> [-- program-args...]
+#
+# --no-cruby: single-sided behavior leg — for FFI / AOT-only apps (tep, toy) that
+# can't run under CRuby. The behavior leg then reports "ran clean" / "crash"
+# instead of comparing against an oracle. (Auto-detected too: if the program
+# raises immediately under CRuby, the leg degrades to single-sided on its own.)
 #
 # Env: SPINEL_DIR (default ~/sites/spinel), SPINEL_INT_OVERFLOW (passed to bisect).
 
@@ -21,10 +26,12 @@ SPINEL_DIR="${SPINEL_DIR:-$HOME/sites/spinel}"
 BISECT="$HERE/../value-bisect/bisect.sh"
 JSON=0
 DO_BISECT=1
+NOCRUBY_FLAG=""
 while :; do
   case "$1" in
     --json)      JSON=1; shift ;;
     --no-bisect) DO_BISECT=0; shift ;;
+    --no-cruby)  NOCRUBY_FLAG="--no-cruby"; shift ;;  # single-sided behavior leg
     *) break ;;
   esac
 done
@@ -63,7 +70,7 @@ N_UNTYPED=$(grep -E "^\s*(def |attr_|@)" "$WORK/x.rbs" 2>/dev/null | grep -oE "u
 BEHAVIOR="skipped"
 BEHAVIOR_JSON='null'
 if [ "$DO_BISECT" -eq 1 ] && [ -x "$BISECT" ]; then
-  BJSON=$(SPINEL_DIR="$SPINEL_DIR" "$BISECT" --json "$SRC" -- "$@" 2>/dev/null)
+  BJSON=$(SPINEL_DIR="$SPINEL_DIR" "$BISECT" --json $NOCRUBY_FLAG "$SRC" -- "$@" 2>/dev/null)
   V=$(printf '%s' "$BJSON" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("verdict","?"))' 2>/dev/null)
   if [ -n "$V" ]; then BEHAVIOR="$V"; BEHAVIOR_JSON="$BJSON"; else BEHAVIOR="unavailable"; fi
 fi
@@ -105,6 +112,7 @@ fi
 case "$BEHAVIOR" in
   ok)          printf '  behavior   ✓ matches CRuby (value-bisection)\n' ;;
   diverge)     printf '  behavior   ✗ MISCOMPILE — diverges from CRuby (run bisect.sh for the site)\n' ;;
+  ran)         printf '  behavior   ~ ran clean under Spinel, but no CRuby oracle (single-sided — values unchecked)\n' ;;
   crash)       printf '  behavior   ✗ CRASH under the harness\n' ;;
   abort)       printf '  behavior   ✗ Spinel raised/aborted before CRuby'\''s result\n' ;;
   skipped)     printf '  behavior   - skipped (--no-bisect)\n' ;;

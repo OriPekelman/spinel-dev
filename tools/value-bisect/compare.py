@@ -99,6 +99,9 @@ def main():
     as_json = "--json" in args
     if as_json:
         args.remove("--json")
+    no_oracle = "--no-oracle" in args
+    if no_oracle:
+        args.remove("--no-oracle")
     # In --json mode the human report is suppressed; a single JSON object is
     # printed at the end (for triage / agents / CI).
     _print = (lambda *a, **k: None) if as_json else print
@@ -108,6 +111,35 @@ def main():
     spinel = _load(spinel_path)
     ch = cruby.get("histories", {})
     sh = spinel.get("histories", {})
+
+    # Single-sided mode (--no-cruby / no usable oracle): no value diff is
+    # possible, but the Spinel-side trace still localizes a crash and reports
+    # whether the compiled program ran clean. Verdict: crash | ran.
+    if no_oracle or cruby.get("no_oracle"):
+        crash = spinel.get("crash")
+        spinel_exit = spinel.get("exit")
+        _print("== single-sided Spinel trace (no CRuby oracle) ==")
+        _print("  Spinel: exit=%s, %s line-events, %d vars traced"
+              % (spinel_exit, spinel.get("events"), len(sh)))
+        result = {"spinel_exit": spinel_exit, "no_oracle": True}
+        if crash:
+            where = ("%s:%s" % (crash.get("file"), crash.get("line"))
+                     if crash.get("line") else "an unknown location")
+            _print("\n[CRASH] Spinel stopped on a fault at %s\n        %s"
+                  % (where, crash.get("signal")))
+            result.update(verdict="crash", file=crash.get("file"),
+                          line=crash.get("line"), signal=crash.get("signal"))
+            _print("VERDICT|crash|%s|%s|%s"
+                  % (crash.get("file"), crash.get("line"), crash.get("signal")))
+        else:
+            _print("\n[RAN] no crash — ran to exit %s. No oracle, so values are "
+                  "not checked against CRuby (use a CRuby-runnable entry for that)."
+                  % spinel_exit)
+            result.update(verdict="ran")
+            _print("VERDICT|ran|%s" % spinel_exit)
+        if as_json:
+            print(json.dumps(result))
+        return 1 if (crash or (spinel_exit not in (0, None))) else 0
 
     _print("== differential value-bisection ==")
     _print("  CRuby : exit=%s, %s line-events, %d scalar vars"
