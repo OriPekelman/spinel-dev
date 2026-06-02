@@ -13,9 +13,12 @@ Invoke (from bisect.sh):
     lldb -b -o 'command script import spinel_lldb_trace.py' \
             -o 'spinel_value_trace' <binary> [-- args...]
 
-Scope: scalar locals only (mrb_int / mrb_float / mrb_bool). Strings and
-containers are pointers to runtime structs and need formatter support — a
-follow-up. Their absence is reported in the JSON ("skipped_nonscalar").
+Scope: scalars (mrb_int / mrb_float / mrb_bool), strings, int/str arrays (read
+from inferior memory at fixed offsets), and — via inferior calls to the runtime's
+own inspect helpers — bignums, float arrays, and the typed hashes (Str/Int/Sym/
+Poly-keyed). Whatever still has no formatter is reported in the JSON
+("skipped_nonscalar"). Container formats match cruby_trace.rb byte-for-byte
+(arrays `a:[...]`, hashes `h:{...}`).
 """
 
 import json
@@ -110,6 +113,44 @@ def _format_bigint(v):
     return ("i:" + s) if (err.Success() and s is not None) else None
 
 
+# Containers whose layout is macro-generated (no clean struct to read at fixed
+# offsets like IntArray/StrArray), so we format them by calling the runtime's own
+# inspect helper in the inferior — same mechanism as _format_bigint, and the
+# inspect output is defined to match CRuby's Array#inspect / Hash#inspect. Map:
+# SBValue base type -> (inspect fn, tag). FloatArray uses the 'a:' array tag so it
+# lines up with cruby_trace's flat-array format; hashes use a 'h:' tag.
+_INSPECT_FORMATTERS = {
+    "sp_FloatArray": ("sp_FloatArray_inspect", "a:"),
+    "sp_StrIntHash": ("sp_StrIntHash_inspect", "h:"),
+    "sp_StrStrHash": ("sp_StrStrHash_inspect", "h:"),
+    "sp_IntStrHash": ("sp_IntStrHash_inspect", "h:"),
+    "sp_IntIntHash": ("sp_IntIntHash_inspect", "h:"),
+    "sp_SymPolyHash": ("sp_SymPolyHash_inspect", "h:"),
+    "sp_StrPolyHash": ("sp_StrPolyHash_inspect", "h:"),
+    "sp_PolyPolyHash": ("sp_PolyPolyHash_inspect", "h:"),
+}
+
+
+def _format_via_inspect(v, fn, tag):
+    """Call `fn(v)` in the inferior (returns a const char*) and return tag+string.
+    Read-only-ish: inspect only allocates a string and Spinel's GC is non-moving,
+    so it's safe at a stop. None on any failure / NULL receiver."""
+    if v.GetValueAsUnsigned() == 0:
+        return None
+    frame = v.GetFrame()
+    if not frame or not frame.IsValid():
+        return None
+    ev = frame.EvaluateExpression("(const char*)%s(%s)" % (fn, v.GetName()))
+    if not ev or not ev.IsValid() or ev.GetError().Fail():
+        return None
+    addr = ev.GetValueAsUnsigned()
+    if addr == 0:
+        return None
+    err = lldb.SBError()
+    s = ev.GetProcess().ReadCStringFromMemory(addr, MAX_STR, err)
+    return (tag + s) if (err.Success() and s is not None) else None
+
+
 def _format(v, process):
     """Return a typed 'tag:value' string for a scalar / string / flat-array /
     bigint SBValue, else None. Scalars, strings and int/str arrays are read
@@ -142,6 +183,9 @@ def _format(v, process):
         return _format_str_array(v, process)
     if base == "sp_Bigint":
         return _format_bigint(v)
+    fmt = _INSPECT_FORMATTERS.get(base)
+    if fmt:
+        return _format_via_inspect(v, fmt[0], fmt[1])
     return None
 
 

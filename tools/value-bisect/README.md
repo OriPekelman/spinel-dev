@@ -127,9 +127,13 @@ the trace's stop cap before faulting; bounded crashes are caught fast.)
   that's `p lv_x` over corrupt DWARF; documented separately.)
 - **Bigints** are compared (`sp_Bigint*` → `i:<decimal>` via one
   `sp_bigint_to_s` call) — e.g. a doubling loop that Spinel auto-promotes
-  matches CRuby's Bignum. **Int/String arrays** are compared as `a:[…]` (read
-  from the runtime struct). Float arrays, hashes and user objects are not
-  compared yet.
+  matches CRuby's Bignum. **Arrays** (`a:[…]`) and **typed hashes** (`h:{…}`,
+  Str/Int/Sym/Poly-keyed) are compared too: int/string arrays are read straight
+  from the runtime struct, while float arrays and hashes go through one inferior
+  call to the runtime's own `sp_*_inspect` (its output matches CRuby's
+  `Array#inspect`/`Hash#inspect`, so the two sides line up byte-for-byte). Hashes
+  with a non-scalar key/value are skipped on the CRuby side (one-sided, not a
+  false diverge). User objects are still not compared.
 - Strings are compared up to the first NUL (embedded-NUL binary strings are a
   gap) and capped at 64 KiB.
 - **Per-file, not per-method scoping.** Variables are keyed by `<file>::<var>`,
