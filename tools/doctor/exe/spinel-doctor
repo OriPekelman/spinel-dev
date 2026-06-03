@@ -1,0 +1,6 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+# Launcher: exec the bundled doctor.sh. The behavior leg shells out to
+# spinel-bisect's bisect.sh (resolved via SPINEL_BISECT or a sibling checkout).
+root = File.expand_path("..", __dir__)
+exec("/bin/sh", File.join(root, "doctor.sh"), *ARGV)

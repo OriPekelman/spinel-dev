@@ -80,10 +80,25 @@ Driven by **who consumes what** (different audiences/deps → separate gems):
 3. The `spinel-engine` resolver decision (shared micro-gem vs. duplicated
    env-var contract).
 
-## Stance now
+## Status — scaffolded, not yet published
 
-Fix the three boundaries above (this doc). Keep `ruby-lsp-spinel`'s gemspec as
-the reference shape. **Do not** add publishable gemspecs for `spinel-bisect` /
-`spinel-doctor` yet — scaffolding them invites accidental release and freezes a
-layout before the upstream API settles. Revisit when the first compiler surface
-merges; `ruby-lsp-spinel` is the natural first publish.
+The upstream API is settling (`--emit-rbs` + `--debug` merged, `--emit-types` in
+review), so the gemspecs are now **scaffolded and `gem build`-clean**:
+
+- `tools/ruby-lsp-spinel/ruby-lsp-spinel.gemspec` (pure Ruby; dep `ruby-lsp`).
+- `tools/value-bisect/spinel-bisect.gemspec` + `exe/spinel-bisect`,
+  `exe/spinel-triage` — ships the sh/python/ruby scripts as gem data; the exe
+  launchers `exec` them. Runtime prereqs declared in the description (a `spinel`
+  checkout, `python3`, `lldb`).
+- `tools/doctor/spinel-doctor.gemspec` + `exe/spinel-doctor` — depends on
+  `spinel-bisect` for the behavior leg.
+
+```sh
+cd tools/value-bisect && gem build spinel-bisect.gemspec     # -> spinel-bisect-0.1.0.gem
+```
+
+**Not published.** Publish order when ready: `ruby-lsp-spinel` first (most
+self-contained, once `--emit-types` lands), then `spinel-bisect` → `spinel-doctor`.
+Still open before a push: the shared `spinel-engine` resolver decision and pinning
+the `--emit-types` JSON shape (its PR invites that). `gem build` artifacts are
+gitignored.

@@ -1,0 +1,6 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+# Launcher: exec the bundled bisect.sh (it orchestrates the python/ruby/lldb
+# pieces). Runtime prereqs: a `spinel` checkout (SPINEL_DIR), python3, lldb.
+root = File.expand_path("..", __dir__)
+exec("/bin/sh", File.join(root, "bisect.sh"), *ARGV)

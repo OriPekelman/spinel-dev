@@ -1,0 +1,4 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+root = File.expand_path("..", __dir__)
+exec("/bin/sh", File.join(root, "triage.sh"), *ARGV)
