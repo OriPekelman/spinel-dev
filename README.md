@@ -17,7 +17,9 @@ that motivated it.
 ## The tools
 
 Each is runnable today. The standalone tools live in [`tools/`](tools/); the
-compiler flags live on the fork.
+compiler flags ship in `matz/spinel` (`--emit-rbs`, `--debug` upstream; the rest
+on the `feat/typing` fork — see [Compiler surfaces](#compiler-surfaces-upstreaming)).
+Jump to [Getting started](#getting-started) for hands-on usage.
 
 ### `spinel doctor` — one-shot health check
 [`tools/doctor/`](tools/doctor/) · `doctor.sh [--json] [--no-bisect] <program.rb>`
@@ -45,6 +47,63 @@ test-suite failure the same way. Consumed by `spinelgems verify` to upgrade a
 A ruby-lsp addon that surfaces Spinel's per-node type inference on hover, and
 flags where a type degraded to the boxed poly slow path — directly attacking the
 silent-miscompile problem at authoring time.
+
+## Getting started
+
+You need a built `spinel` (the AOT compiler). Point the standalone tools at it
+with `SPINEL_DIR` (defaults to `~/sites/spinel`). The bisector also needs
+`python3` + `lldb`.
+
+```sh
+git clone https://github.com/matz/spinel && cd spinel && make all   # or your checkout
+export SPINEL_DIR=$PWD
+git clone https://github.com/OriPekelman/spinel-dev && cd spinel-dev
+```
+
+**1 — "Is my program safe to compile?"** Run the one-shot health check:
+
+```sh
+sh tools/doctor/doctor.sh app.rb
+#  compile    ⚠ 1 unresolved call(s) — Spinel silently emits 0:
+#               - cannot resolve call to 'delete_at' on float_array (emitting 0)
+#  inference  ⚠ 3 method(s) widened to untyped (slow path / inference gap)
+#  behavior   ✓ matches CRuby (value-bisection)
+#  verdict    degrades
+```
+
+`--json` for CI/agents. `--no-cruby` for FFI/AOT-only apps that can't run under
+CRuby (reports `ran`/`crash` from the Spinel side alone).
+
+**2 — "It compiled but the output is wrong. Where?"** Localize the divergence:
+
+```sh
+sh tools/value-bisect/bisect.sh app.rb
+#  [MISCMP] x @ app.rb:12   CRuby=9223372036854775808  Spinel=-9223372036854775808
+```
+
+It traces every scalar/string/array/hash/bignum local under CRuby and a Spinel
+`--debug` build and reports the first to diverge — or `output-differ` when the
+wrong value never lands in a local. `triage.sh --failing` does this for a whole
+failing test suite.
+
+**3 — "What did the compiler infer?"**
+
+```sh
+spinel app.rb --emit-rbs                 # app.rbs — signatures (untyped = slow path)
+spinel app.rb --emit-types -o t.json     # per-position {file,line,col,type} + degrade diagnostics
+```
+
+**4 — "Step through the compiled binary."**
+
+```sh
+spinel app.rb --debug -o app && gdb ./app    # break app.rb:42 ; step ; bt  → Ruby lines
+```
+
+**5 — "In my editor."** Install [`tools/ruby-lsp-spinel`](tools/ruby-lsp-spinel/)
+as a ruby-lsp addon for inferred types on hover + degrade underlines.
+
+Per-tool detail lives in each tool's README; the agentic/CI patterns are in
+[docs/03](docs/03-tooling-for-contributors-and-agents.md).
 
 ### Compiler surfaces (upstreaming)
 
@@ -75,6 +134,7 @@ in `matz/spinel` one reviewable PR at a time; until each lands it stages on the
 | [05-tooling-surfaces-and-roadmap](docs/05-tooling-surfaces-and-roadmap.md) | Gap analysis — which surfaces (CI, terminal, IDE/DAP, type-checker, packaging) are still needed, in suggested order. |
 | [06-validation-results](docs/06-validation-results.md) | Evidence the tools are valuable: `--emit-rbs` vs tep's authored RBS (~73% agreement), `doctor` on toy (real emit-0 + degrades), and the limitations both expose. |
 | [07-packaging](docs/07-packaging.md) | How the tools ship: compiler features upstream, harness as three small gems (`ruby-lsp-spinel`, `spinel-bisect`, `spinel-doctor`). Proposal; unpublished pending upstream merge. |
+| [08-perf-analysis](docs/08-perf-analysis.md) | Proposal: "would Spinel make you faster?" (static degrade-scan estimate) + "why slow?" (a profiler over the `#line` map). Reuses the inference + source-map substrate. |
 
 ## Sibling projects
 
