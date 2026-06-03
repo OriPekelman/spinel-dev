@@ -65,32 +65,45 @@ Two honest caveats it surfaced:
   Confirming the slow end needs a heavier dispatch-bound corpus *with* degrades.
 - Anything under ~100 ms of compute is startup-dominated and excluded.
 
-## `spinel-perf.rb` — the "why slow" profiler (working)
+## `spinel-perf.rb` — the "why slow" profiler (working, per-line)
 
-Compiles `-pg -g -O2` (gprof — `perf` is locked down at `perf_event_paranoid=4`
-here), runs, and turns gprof's `sp_<method>` flat profile back into a flat profile
-of **Ruby methods** (same de-mangling as the native backtrace), overlaying the
-`--emit-rbs` degrade scan so hot methods on the poly slow path are tagged.
+Compiles `-g -pg -O2` (the `#line` build, so the line table points at the `.rb`;
+gprof since `perf` is locked down at `perf_event_paranoid=4` here), runs it a few
+times and sums the profiles, then turns gprof's `-l` *line-level* `sp_<method>`
+profile back into Ruby — de-mangled to a method, with the **source text** and the
+`--emit-rbs` degrade overlay. `--json` for tooling.
 
 ```
-$ SPINEL_DIR=~/sites/spinel ruby spinel-perf.rb bm_gcbench.rb
-  self%  method                  inference
-  37.5%  make_tree
-  18.8%  Node#pool_recycle
-$ ... bm_ao_render.rb
-  40.0%  Vec#vnormalize
+$ SPINEL_DIR=~/sites/spinel ruby spinel-perf.rb bm_ao_render.rb
+  hot methods (self-time, stable):
+   16.0%   Vec#pool_recycle
+   12.0%   Plane#intersect
+   12.0%   Sphere#intersect
+    8.0%   Scene#ambient_occlusion
+  hot lines (sample-limited — gprof 10ms; heavier workload = finer):
+    4.0%   Scene#ambient_occlusion  bm_ao_render.rb:242  x = Math.cos(phi) * Math.sqrt(1.0 - r)
 ```
 
-The overlay is wired (it tags a hot `untyped` method `[SLOW: ...]`); the clean
-benchmarks just have no untyped hot methods, so it correctly tags nothing.
+### What "usability for perf data" needed (and the real limit)
+
+The presentation is the easy, high-value part: **per-line + source text**, a
+**stable per-method rollup** as the headline, the **`⚠` slow-path overlay**, JSON,
+and multi-run summing. The hard limit is *data fidelity*: gprof samples at 10 ms,
+so on sub-2 s workloads the exact hot *line* jitters run-to-run (the *methods* are
+stable — hence leading with the rollup). Sharpening it needs a heavier workload,
+or a higher-resolution sampler (`perf`, blocked here). So: usable format, gprof-
+limited data.
+
+The overlay is wired (`⚠` on a hot `untyped` method); Spinel's own benchmarks are
+cleanly typed, so it correctly tags nothing on them.
 
 ## Next, if this is worth pursuing
 
 - A heavier, *poly-heavy* corpus (a real interpreter / parser, or scaled-up
-  `micro_lisp`) to validate the untyped→slow end and exercise the `[SLOW]` overlay.
-- Per-**line** profiling: a `-g` build's `#line` table already points at the `.rb`,
-  so `addr2line` / `gprof -l` would attribute samples to Ruby lines directly.
-- Switch `speedup-estimate` to `--emit-types` (#1298) for node-level coverage
-  (method-less scripts, hot top-level loops).
+  `micro_lisp`) to validate the untyped→slow end and exercise the `⚠` overlay.
+- A higher-resolution sampler where `perf` is permitted (or a userspace sampler),
+  to make per-line stable — gprof is the portable fallback, not the ceiling.
+- Switch the `⚠` overlay to `--emit-types` (#1298) so it's **per-line**, not
+  per-method; and use it in `speedup-estimate` for method-less / top-level code.
 
 Discussion: [spinel-dev#5](https://github.com/OriPekelman/spinel-dev/issues/5).
