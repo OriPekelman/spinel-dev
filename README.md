@@ -150,28 +150,21 @@ in `matz/spinel` one reviewable PR at a time; until each lands it stages on the
 - **[toy](https://github.com/OriPekelman/toy)** — pure-Ruby ML framework compiled
   by Spinel (Tep's downstream consumer).
 
-## What Spinel needs to make this work (high-level)
+## Why this is cheap in Spinel
 
-Spinel's design — closed-world, no VM, no `VALUE`, native-typed locals, no
-`eval` — rules out runtime debuggers and a live REPL, but makes two normally-hard
-things cheap, given a few opt-in compiler hooks. At a high level, the tools above
-depend on Spinel providing:
+Spinel's design — closed-world, no VM, no `VALUE`, native-typed locals, no `eval`
+— rules out runtime debuggers and a live REPL, but makes the opposite cheap: the
+compiler *already* computes a whole-program type for every node and (under
+`--debug`) a `#line` map back to Ruby. The tools just surface that. The specific
+hooks — source-mapped debug builds, inference export (RBS / JSON), native
+backtraces — are listed with their upstreaming status under
+[Compiler surfaces](#compiler-surfaces-upstreaming); the design rationale is in
+[docs 00–01](docs/00-architecture-constraints.md).
 
-1. **A source-mapped debug build.** Emit `#line` directives back to the Ruby
-   source and keep methods non-inlined under `--debug`, so a native debugger
-   steps through Ruby and frames are real. *(Caveat: `#line` perturbs DWARF
-   variable locations for functions with heap locals; the value-bisect harness
-   sidesteps this by tracing a `#line`-free build and mapping C lines back.)*
-
-2. **Inference export.** The analyzer already computes a whole-program type for
-   every node; expose it as RBS and as position-keyed JSON so editors, type
-   checkers, and the degrade-scanner can read what the compiler concluded —
-   including where a type fell back to the boxed slow path.
-
-3. **Native backtraces.** Snapshot the C stack at `raise` and format
-   `sp_<method>` frames back to Ruby names. On Linux this additionally needs
-   user methods at *external* linkage plus `-rdynamic` so the dynamic symbol
-   table can resolve them (debug builds only).
+*One load-bearing caveat:* `#line` directives perturb DWARF variable-location
+info, so a debugger misreads *locals* in functions with heap locals — stepping
+and the line table are correct. value-bisect sidesteps it by tracing a
+`#line`-free build and mapping C lines back.
 
 The throughline: every capability is **opt-in and observability-only** — it
 exposes what the compiler already knows or adds a debug-gated build mode, and
