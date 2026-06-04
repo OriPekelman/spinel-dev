@@ -4,6 +4,48 @@ Prototype for the two questions in [docs/08](../../docs/08-perf-analysis.md):
 *"would Spinel make this much faster?"* (static) and *"why is my Spinel app
 slow?"* (dynamic). This branch is a **spike**.
 
+## `spinel-flamegraph.rb` — Ruby-demangled flamegraphs (the GC story, visual)
+
+`spinel-perf` gives you the flat profile; `spinel-flamegraph` gives you the
+**call hierarchy** as a flamegraph whose frames are *Ruby methods*, with the
+runtime layered by cost class: **GC/alloc red**, other runtime grey, **user
+`Class#method` blue**. It folds gprof's `-pg` call graph (the
+stackcollapse-gprof algorithm), demangling `sp_<Class>_<method>` exactly like the
+native backtrace. Emits **folded stacks** (the universal flamegraph input — pipe
+to any renderer) *and* a self-contained **SVG** (no `flamegraph.pl` needed).
+
+```sh
+# from a running profile (e.g. the blog server you drove under load):
+ruby spinel-flamegraph.rb --gmon ./blog-pg gmon.out -o blog.svg
+# or compile+run a program directly (needs a heavy enough workload — see caveat):
+SPINEL_DIR=~/sites/spinel ruby spinel-flamegraph.rb prog.rb -- args -o prog.svg
+```
+
+On the roundhouse Rails blog it makes the [spinel-dev#5/#7](https://github.com/OriPekelman/spinel-dev/issues/7)
+allocation ceiling *visible* — top folded stacks (Ruby call paths, leaf = the
+allocation):
+
+```
+main;…;Tep::Request#new;Tep.str_hash;StrStrHash_new;gc_alloc          1899
+ActionView::ViewHelpers.stylesheet_link_tag;SymStrHash_new;gc_alloc    794
+main;…;ActiveRecord::Base#save;PtrArray_new_scan;gc_alloc              380
+main;…;ActiveRecord::Base#save;Article.from_stmt;Article#new;gc_alloc  163
+  leaf self-time by class:  gc 71.1%   runtime 14.5%   user 14.5%
+```
+
+The flame is ~71% red at the leaves: request handling builds hashes/strings/rows,
+and every `…_new` bottoms out in `sp_gc_alloc`. That's the "compiled code isn't in
+its fast lane → it's allocation-bound" story, as a picture — exactly the
+decomposition #7's tier question asked for.
+
+Caveats (same substrate as `spinel-perf`): gprof, not `perf` (locked down here),
+so timing is sampled and the fold apportions self-time up caller paths
+(approximate, not true stacks — some frames are rootless when gprof can't resolve
+a caller). `-O2` inlines small methods. Sub-second workloads give too few samples
+(use `--gmon` on a real run, or a heavy input). A poly/slow-path overlay (orange,
+from `--emit-types`) is a natural next layer — though here hot∧poly≈0, so it'd be
+mostly empty on this corpus.
+
 ## Measured on a real Rails app (roundhouse) — and the hypothesis was wrong
 
 @rubys handed us a real corpus: [roundhouse](https://rubys.github.io/roundhouse/)
