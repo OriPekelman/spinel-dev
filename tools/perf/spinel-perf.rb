@@ -31,8 +31,17 @@ RUNTIME_PFX = /\A(int_|str_|float_|sym_|gc_|bigint|sprintf|raise|exc_|range|utf8
   Complex|Rational|Sym|alloc|free|to_s|dup|new|pack|unpack|regex|re_|idiv|imod|gcd|fdiv|ipow|
   json|String|Array|main\b)/x
 
+# GC frames: the precise collector core (sp_gc_mark/roots/...) and the
+# per-class precise scanners spinel generates (`sp_<Class>_gc_scan`). The latter
+# would otherwise mis-demangle to a fake user method (`Class#gc_scan`), so it
+# has to be caught here, before the user-method path. GC self-time is its own
+# bucket — a flat-across-workload ceiling (Q3, spinel-dev#5) reads as collector
+# pause, which is exactly these frames.
+GC_FRAME = /\Asp_gc_\w|_gc_scan\b/
+
 def demangle(sym) # sp_<Class>_<method> -> Class#method / Class.method / bare
   return nil unless sym&.start_with?("sp_")
+  return :gc if sym =~ GC_FRAME
   name = sym[3..]
   return :runtime if name =~ RUNTIME_PFX
   mstart = nil
@@ -103,12 +112,15 @@ Dir.mktmpdir("spinel_perf") do |w|
 
   lines = Hash.new(0.0)   # [ruby_method, lineno] -> self%
   runtime_pct = 0.0
+  gc_pct = 0.0            # Q3: GC self-time, separated from generic runtime
   # gprof -l flat rows:  "%  cum  self  [calls ns ns]  sp_fn (file.rb:NN @ addr)"
   `gprof -l -p -b #{bin} #{gmons.join(' ')} 2>/dev/null`.each_line do |ln|
     next unless ln =~ /^\s*(\d+\.\d+)\s+[\d.]+\s+[\d.]+\s+.*?\b(sp_\w+)\s+\((\S+?):(\d+)\s+@/
     pct = $1.to_f; fn = $2; file = $3; lineno = $4.to_i
     r = demangle(fn)
-    if r == :runtime || !r.is_a?(String) || file !~ /#{Regexp.escape(base)}/
+    if r == :gc
+      gc_pct += pct; next
+    elsif r == :runtime || !r.is_a?(String) || file !~ /#{Regexp.escape(base)}/
       runtime_pct += pct; next
     end
     lines[[r, lineno]] += pct
@@ -128,7 +140,8 @@ Dir.mktmpdir("spinel_perf") do |w|
   hot_poly_share = user_pct.zero? ? 0.0 : 100.0 * hot_poly_pct / user_pct
 
   if json
-    out = { file: src, runtime_pct: runtime_pct.round(1), runs: gmons.size, overlay: overlay,
+    out = { file: src, runtime_pct: runtime_pct.round(1), gc_pct: gc_pct.round(1),
+            runs: gmons.size, overlay: overlay,
             hot_poly_pct_of_user: hot_poly_share.round(1),
             methods: methods.map { |m, p| { method: m, self_pct: p.round(1) } },
             lines: ranked.map { |(m, l), p| { method: m, line: l, self_pct: p.round(1),
@@ -138,7 +151,11 @@ Dir.mktmpdir("spinel_perf") do |w|
 
   gran = overlay == :types ? "per-line via --emit-types" : "per-method via --emit-rbs (no --emit-types; coarser)"
   puts "spinel-perf: #{src}   (gprof -l, #line + -pg -O2, #{gmons.size} runs summed)"
-  puts "  ~%.0f%% of self-time is runtime/GC/inlined; the rest is user code." % runtime_pct
+  printf "  self-time split:  %.0f%% user · %.0f%% GC · %.0f%% other-runtime/inlined\n", lines.values.sum, gc_pct, runtime_pct
+  if gc_pct >= 15.0
+    puts "    ⓘ GC self-time is high — a ceiling that's flat across workloads (cf. Q3,"
+    puts "      spinel-dev#5) reads as periodic collector pause, not user-code cost."
+  end
   printf "  hot ∧ poly: %.0f%% of user self-time is on the boxed slow path  (⚠ overlay: %s)\n\n", hot_poly_share, gran
   puts "  hot methods (self-time, stable):"
   methods.each { |m, pct| printf "  %5.1f%%  %s%s\n", pct, (lines.any? { |(mm, l), _| mm == m && is_poly.call(mm, l) } ? "⚠ " : "  "), m }

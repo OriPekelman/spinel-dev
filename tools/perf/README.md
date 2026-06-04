@@ -4,6 +4,64 @@ Prototype for the two questions in [docs/08](../../docs/08-perf-analysis.md):
 *"would Spinel make this much faster?"* (static) and *"why is my Spinel app
 slow?"* (dynamic). This branch is a **spike**.
 
+## Measured on a real Rails app (roundhouse) — and the hypothesis was wrong
+
+@rubys handed us a real corpus: [roundhouse](https://rubys.github.io/roundhouse/)
+compiles one Rails blog to a stock-MRI `ruby` target and an AOT `spinel` target
+from the same IR, and AOT buys **1.4–1.9×** over CRuby (far below the 20–34× of
+tight numeric code). We ran the whole battery against it. Three findings, the
+last one a surprise that overturned our own prediction:
+
+**1. The two-granularity untyped gap is real but points the *opposite* way at
+the app level (Q1).** `--emit-rbs` vs `--emit-types` over the whole app:
+
+| granularity | untyped | what it means |
+|---|--:|---|
+| signature (`--emit-rbs`) | **22.8%** of 569 method/attr signatures | a method counts if *any* slot widens |
+| position (`--emit-types`) | **3.19%** of 13,342 positions | the true density of boxed positions |
+
+At the *method* (`churn`) scale the signature scan *under*-counts (clean boundary,
+boxed body); at the *app* scale it *over*-counts (one widened return marks a whole
+method whose body is concrete). Both are failures of *unweighted* scanning — which
+is the whole argument for hot-weighting. Boxing concentrates in specific files
+(`action_dispatch/flash.rb` 23.7%, `session.rb` 25.8%, the `*_params` models 21.7%).
+
+**2. The dynamic profile refutes the "hot ∧ poly explains it" hypothesis — and
+confirms the GC ceiling (Q2 vs Q3).** We built the blog `-pg`, drove 30k
+requests/endpoint through the live fiber server (it shuts down cleanly on SIGTERM,
+so gprof flushes), and split self-time:
+
+| endpoint | GC/alloc | other runtime | user | hot ∧ poly (of user) |
+|---|--:|--:|--:|--:|
+| `/articles` (index HTML) | **55.6%** | 24.8% | 10.0% | **0%** |
+| `/articles/1.json` | **56.1%** | 28.7% | 6.8% | **0%** |
+
+The prediction was that hot∧poly would rise as speedup falls. It didn't — **hot∧poly
+is ≈0**: the residual poly (finding 3) is *real but cold*. What dominates is
+**GC/alloc at ~55%, flat across endpoints** — which is exactly @rubys's flat ~20ms
+p99 ceiling (his Q3), now attributed. The top *user* methods are almost all `#new`
+constructors and string-building view helpers, i.e. allocation sites. **So the
+Rails speedup ceiling is allocation pressure, not dispatch boxing** — and AOT
+can't remove the allocations. (This is why the new `gc_pct` split in `spinel-perf`
+is load-bearing: without separating GC from user self-time, you'd never see that
+the bottleneck isn't in the Ruby at all.)
+
+**3. The residual boxing *is* an inferencer disagreement (Q5) — `rbs-disagree.rb`.**
+roundhouse ships its own inferred RBS (`sig/**`); Spinel re-infers. Where roundhouse
+says concrete and Spinel widens, the two disagree on a position one of them got
+wrong. `rbs-disagree.rb` finds **48** such coordinates on the blog — e.g.
+`ArticleRow#body: String` (roundhouse) vs `untyped` (Spinel), while `title`
+(identical source shape) agrees. The tool localizes the culprit: `self.body =
+row["body"]` where `row` is `Hash[String, untyped]`, so the untyped hash-read poisons
+the `body` slot program-wide. A naive same-field minimal repro does *not* reproduce
+it (confirmed: see `rbs-disagree.rb`'s header) — the widen is context-specific — so the tool hands you the
+coordinate + suspects, not a guaranteed repro. Each ⚠ is a candidate bug on one
+inferencer or the other.
+
+```sh
+SPINEL_DIR=~/sites/spinel ruby rbs-disagree.rb main.rb sig .   # entry, consumer-rbs-dir, src-root
+```
+
 ## Granularity is everything (thanks @rubys, spinel-dev#5)
 
 Sam Ruby's key correction: a *method-signature* scan (`--emit-rbs`) is blind to
