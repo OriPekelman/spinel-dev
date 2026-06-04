@@ -1,0 +1,20 @@
+# doctor-gate config for toy (https://github.com/OriPekelman/toy), per toy#32.
+#
+# toy is FFI/AOT-only — the gated training/inference paths run through the ggml
+# engine, not under CRuby — so the behavior leg is single-sided (no_cruby).
+#
+# The three allowlisted degrades are dead-but-latent: the pure-Ruby reference
+# transformer (lib/toy/models/transformer.rb) widens these to untyped, but no
+# gated path reaches the Ruby training backward (it goes through tnn_compute_*).
+# They're acknowledged here so CI is green today; the gate fails the moment a
+# NEW degrade appears, or a refactor re-activates one of these on a live path.
+spinel_dir: ~/sites/spinel          # or set SPINEL_DIR in the workflow env
+defaults:
+  no_cruby: true                    # FFI/AOT-only: single-sided behavior leg
+entrypoints:
+  - lib/toy/run/train.rb
+  - lib/toy/run/infer.rb
+allow:
+  - embed_backward                  # token_ids -> poly (length/[] on it); dead path
+  - cross_entropy_grad              # gradient path runs through FFI, not Ruby
+  - embedding                       # the Ruby embedding lookup; FFI engine owns the live one

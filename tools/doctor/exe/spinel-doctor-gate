@@ -1,0 +1,5 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+# Launcher: exec the bundled doctor-gate.rb (sibling of this gem's doctor.sh).
+root = File.expand_path("..", __dir__)
+exec(RbConfig.ruby, File.join(root, "doctor-gate.rb"), *ARGV)

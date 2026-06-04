@@ -34,6 +34,59 @@ spinel doctor: app.rb
 the nested bisect finding under `behavior` — for CI, agents, or a pre-commit
 gate. `verdict` is `clean` | `degrades` | `miscompiles`.
 
+## `doctor-gate.rb` — doctor as a CI gate
+
+`doctor` reports; `doctor-gate` **decides** — it runs doctor over a set of
+entrypoints and exits non-zero on a *new* degrade or any miscompile, so it drops
+into CI as one step.
+
+```sh
+ruby doctor-gate.rb [--config FILE] [--allow PAT]... [--github] [--json] [FILE.rb ...]
+```
+
+The load-bearing idea is the **allowlist**. A degrade can be benign *today*
+because the path is dead — e.g. [toy#32](https://github.com/OriPekelman/toy/issues/32):
+`embed_backward` widens to `untyped`, but every gated training path runs through
+the FFI/ggml engine, never the Ruby method. The behavioral (byte-exact) gates
+can't protect a path they don't exercise. So acknowledge the known-dead degrades
+in an allowlist; the gate then fires the moment a **new** one appears — i.e. when
+a refactor re-activates a latent degrade while all the behavioral gates stay
+green. That's the exact regression class the value-checks structurally can't see.
+
+```yaml
+# .spinel-doctor-gate.yml  (auto-discovered in the working dir)
+spinel_dir: ~/sites/spinel          # optional; env SPINEL_DIR wins
+defaults: { no_cruby: true }        # FFI/AOT-only app — single-sided behavior leg
+entrypoints:
+  - lib/toy/run/train.rb
+  - { path: lib/toy/run/infer.rb, no_cruby: true }   # per-entry override
+allow:                              # acknowledged dead-but-latent degrades
+  - embed_backward                  # substring-matched against the degrade text
+  - cross_entropy_grad
+```
+
+- **Exit codes:** `0` clean / all degrades allowlisted · `1` a new degrade or a
+  miscompile · `2` setup error.
+- A finding is *allowed* if any `allow:` pattern is a substring of its text
+  (`def get: … untyped`, or a `cannot resolve call to 'x'` line).
+- An allow entry that matches nothing is reported as **stale** (the degrade is
+  gone — remove it). Stale entries warn but don't fail.
+- A live **miscompile** (behavior diverges/crashes) is *never* allowlistable —
+  it always fails.
+- `--github` emits `::error::`/`::warning::` workflow annotations; `--json` emits
+  `{pass, entrypoints[], new_degrades[], miscompiles[], stale_allow[]}`.
+
+GitHub Actions step:
+
+```yaml
+- name: spinel doctor-gate
+  run: ruby tools/doctor/doctor-gate.rb --github
+  env:
+    SPINEL_DIR: ${{ github.workspace }}/spinel
+```
+
+See `examples/toy.spinel-doctor-gate.yml` for the toy#32 configuration.
+
 ## Requirements
 
 - A built Spinel at `$SPINEL_DIR` (default `~/sites/spinel`) — needs `-c`,
