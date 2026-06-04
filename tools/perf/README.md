@@ -58,6 +58,13 @@ it (confirmed: see `rbs-disagree.rb`'s header) — the widen is context-specific
 coordinate + suspects, not a guaranteed repro. Each ⚠ is a candidate bug on one
 inferencer or the other.
 
+We chased the `body`-vs-`title` coordinate all the way down — it's a real Spinel
+over-widen ([spinel-dev#8](https://github.com/OriPekelman/spinel-dev/issues/8)): a
+poly-receiver setter (`res.body = controller.body`, `res` poly) fans out to *every*
+class defining `body=`, and the #684 narrowing guard only handles `@ivar`
+receivers, so a poly *local* receiver widens unrelated classes (`ArticleRow#body`).
+Bisection confirmed: `.to_s` at the two `main.rb` sites recovers it to `String`.
+
 ```sh
 SPINEL_DIR=~/sites/spinel ruby rbs-disagree.rb main.rb sig .   # entry, consumer-rbs-dir, src-root
 ```
