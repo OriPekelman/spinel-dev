@@ -6,19 +6,18 @@ that motivated it.
 
 > **Status.** This repo began as analysis — *can Ruby tooling work at all against
 > a closed-world, no-VM, no-`eval` compiler?* That question is now answered by
-> **working tools**, below, and the compiler-side hooks they need are **landing
-> upstream** in [`matz/spinel`](https://github.com/matz/spinel) one PR at a time
-> (`--emit-rbs` merged; `--debug` in review — see [Compiler surfaces](#compiler-surfaces-upstreaming)).
-> The rest stage on the [`OriPekelman/spinel`](https://github.com/OriPekelman/spinel)
-> fork (branch `feat/typing`) until their turn. Everything is opt-in / debug-gated;
-> non-debug release output is byte-for-byte unchanged. The design docs remain as
-> the rationale and open-discussion surface — treat them as RFCs.
+> **working tools**, below, and the compiler-side hooks they need have **all
+> merged upstream** in [`matz/spinel`](https://github.com/matz/spinel) — landed one
+> PR at a time (`--emit-rbs`, `--debug`, `--emit-types`, native backtrace — see
+> [Compiler surfaces](#compiler-surfaces-upstreaming)). Everything is opt-in /
+> debug-gated; non-debug release output is byte-for-byte unchanged. The design
+> docs remain as the rationale and open-discussion surface — treat them as RFCs.
 
 ## The tools
 
 Each is runnable today. The standalone tools live in [`tools/`](tools/); the
-compiler flags ship in `matz/spinel` (`--emit-rbs`, `--debug` upstream; the rest
-on the `feat/typing` fork — see [Compiler surfaces](#compiler-surfaces-upstreaming)).
+compiler flags now all ship in `matz/spinel` (`--emit-rbs`, `--debug`,
+`--emit-types`, native backtrace — see [Compiler surfaces](#compiler-surfaces-upstreaming)).
 Jump to [Getting started](#getting-started) for hands-on usage.
 
 ### `spinel doctor` — one-shot health check
@@ -107,20 +106,20 @@ Per-tool detail lives in each tool's README; the agentic/CI patterns are in
 
 ### Compiler surfaces (upstreaming)
 
-The tools rely on a few opt-in, output-neutral compiler hooks. They're landing
-in `matz/spinel` one reviewable PR at a time; until each lands it stages on the
-`feat/typing` fork.
+The tools rely on a few opt-in, output-neutral compiler hooks. These landed in
+`matz/spinel` one reviewable PR at a time — **all now merged**:
 
 - **`spinel --emit-rbs`** — whole-program inference exported as RBS signatures.
   ✅ **Merged** ([matz/spinel#1276](https://github.com/matz/spinel/pull/1276)).
 - **`spinel --debug` / `-g`** — `#line` directives for native-debugger (lldb/gdb)
-  stepping through Ruby source + non-inlined methods. 🔵 **In review**
+  stepping through Ruby source + non-inlined methods. ✅ **Merged**
   ([matz/spinel#1292](https://github.com/matz/spinel/pull/1292)).
 - **`spinel --emit-types`** — the same inference as position-keyed JSON (what the
-  LSP consumes). 🟡 **Queued** behind `--debug`.
-- **native `Exception#backtrace` / `Kernel#caller`** (macOS + Linux) and a
-  debug-only **null-receiver guard** (`NoMethodError` instead of a silent NULL
-  deref). On the fork, queued behind `--debug`.
+  LSP consumes). ✅ **Merged** ([matz/spinel#1298](https://github.com/matz/spinel/pull/1298)).
+- **native `Exception#backtrace` / `Kernel#caller`** (macOS + Linux) ✅ **Merged**
+  ([matz/spinel#1300](https://github.com/matz/spinel/pull/1300)), plus FloatArray
+  `delete_at`/`join` ([#1301](https://github.com/matz/spinel/pull/1301)) and a
+  debug-only **null-receiver guard** (`NoMethodError` instead of a silent NULL deref).
 
 ## Design docs (RFC / discussion)
 

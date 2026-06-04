@@ -11,16 +11,19 @@ Gem::Specification.new do |spec|
     (unresolved calls that silently emit 0), an inference-degrade scan (methods
     widened to the boxed `untyped` slow path), and a behavior check via
     differential value-bisection (or single-sided for FFI/AOT-only apps). Human
-    or `--json`. Needs a `spinel` checkout (SPINEL_DIR); the behavior leg uses
-    spinel-bisect.
+    or `--json`. Ships `spinel-doctor-gate`, a CI gate that runs doctor over a
+    set of entrypoints with an allowlist of acknowledged (dead-but-latent)
+    degrades and exits non-zero on a new degrade or a miscompile. Needs a
+    `spinel` checkout (SPINEL_DIR); the behavior leg uses spinel-bisect.
   DESC
   spec.homepage      = "https://github.com/OriPekelman/spinel-dev"
   spec.license       = "MIT"
   spec.required_ruby_version = ">= 3.1"
 
-  spec.files       = %w[doctor.sh README.md]
+  spec.files       = %w[doctor.sh doctor-gate.rb README.md] +
+                     Dir["examples/*.yml"]
   spec.bindir      = "exe"
-  spec.executables = %w[spinel-doctor]
+  spec.executables = %w[spinel-doctor spinel-doctor-gate]
   spec.require_paths = ["."]
 
   spec.add_dependency "spinel-bisect", ">= 0.1.0"
