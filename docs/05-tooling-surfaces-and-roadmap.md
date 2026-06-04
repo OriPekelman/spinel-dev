@@ -20,8 +20,9 @@ current on upstream.
   **A4** spinelgems `verify` self-localization — all done.
 - **E1** container / bignum value formatting (+ Rational + the output-diff
   fallback) — done; plus the single-sided `--no-cruby` harness mode.
-- **F1** upstreaming has begun: `--emit-rbs` **merged** (matz/spinel#1276),
-  `--debug` **in review** (#1292), `--emit-types` queued.
+- **F1** upstreaming **complete** — all five surfaces merged: `--emit-rbs`
+  (matz/spinel#1276), `--debug` (#1292), `--emit-types` (#1298), native
+  backtrace (#1300), FloatArray ops (#1301).
 - **F3** validated at scale on `tep` and `toy` — see
   [06-validation-results](06-validation-results.md).
 

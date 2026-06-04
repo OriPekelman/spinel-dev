@@ -14,8 +14,8 @@ Two layers, two destinations:
 - **Compiler features → `matz/spinel`** (not gems): `--debug`/`#line` stepping,
   `--emit-rbs`, `--emit-types`, native `Exception#backtrace`. These are
   observability hooks *inside* the compiler; they belong upstream, opt-in and
-  output-neutral. (Roadmap F1 — underway: `--emit-rbs` merged in
-  matz/spinel#1276, `--debug` in review #1292.)
+  output-neutral. (Roadmap F1 — **all merged**: `--emit-rbs` #1276, `--debug`
+  #1292, `--emit-types` #1298, native backtrace #1300, FloatArray ops #1301.)
 - **Harness → gems**: the tools that *consume* those hooks — the LSP addon, the
   differential bisector, the one-shot doctor. These are what we package.
 
@@ -73,17 +73,19 @@ Driven by **who consumes what** (different audiences/deps → separate gems):
 
 ## What blocks publishing (the gate)
 
-1. Upstream merge of the compiler surfaces into `matz/spinel` (F1) — until then
-   we'd pin users to the fork.
-2. The `--emit-types` JSON shape + flag names may change in review ("settle the
-   API on real apps first").
+1. ~~Upstream merge of the compiler surfaces into `matz/spinel` (F1)~~ —
+   **done**: all five surfaces merged (#1276/#1292/#1298/#1300/#1301), so a
+   release can target upstream `spinel` rather than the fork.
+2. The `--emit-types` JSON shape + flag names are now settled (merged in #1298) —
+   the "settle the API on real apps first" gate is cleared.
 3. The `spinel-engine` resolver decision (shared micro-gem vs. duplicated
    env-var contract).
 
 ## Status — scaffolded, not yet published
 
-The upstream API is settling (`--emit-rbs` + `--debug` merged, `--emit-types` in
-review), so the gemspecs are now **scaffolded and `gem build`-clean**:
+The upstream API has **landed** (`--emit-rbs`, `--debug`, `--emit-types`, native
+backtrace, FloatArray ops all merged), so the gemspecs are **scaffolded and
+`gem build`-clean** and the upstream-merge gate is no longer blocking:
 
 - `tools/ruby-lsp-spinel/ruby-lsp-spinel.gemspec` (pure Ruby; dep `ruby-lsp`).
 - `tools/value-bisect/spinel-bisect.gemspec` + `exe/spinel-bisect`,

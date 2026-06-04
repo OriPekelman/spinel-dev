@@ -17,16 +17,16 @@ The unifying idea: **make the compiler's own knowledge observable**, and turn
 
 ## Where this lives
 
-The compiler changes stage on a fork — `OriPekelman/spinel`, branch
-`feat/typing` (contains everything) — and are **landing upstream one PR at a
-time**: `--emit-rbs` is merged (matz/spinel#1276), `--debug` is in review
-(#1292), `--emit-types` and the native backtrace are queued behind it. The
-standalone tools live in this repo, `spinel-dev/tools/`. Why fork-first then
-upstream incrementally: every change is opt-in and `--debug`/env-gated, so
-non-debug output is byte-for-byte unchanged and the suite stays green — but the
-surface area (a new parser field, a runtime backtrace, two analyzer emit modes,
-a wrapper flag set) was worth exercising on real apps (`tep`, `toy`) and settling
-per-PR in review rather than landing all at once.
+The compiler changes staged on a fork — `OriPekelman/spinel`, branch
+`feat/typing` (contains everything) — and have now **all landed upstream**, one
+PR at a time: `--emit-rbs` (matz/spinel#1276), `--debug` (#1292), `--emit-types`
+(#1298), native `Exception#backtrace` (#1300), and FloatArray ops (#1301) are
+**merged**. The standalone tools live in this repo, `spinel-dev/tools/`. Why
+fork-first then upstream incrementally: every change is opt-in and
+`--debug`/env-gated, so non-debug output is byte-for-byte unchanged and the suite
+stays green — but the surface area (a new parser field, a runtime backtrace, two
+analyzer emit modes, a wrapper flag set) was worth exercising on real apps
+(`tep`, `toy`) and settling per-PR in review rather than landing all at once.
 
 ## The tools, and the rationale for each
 
