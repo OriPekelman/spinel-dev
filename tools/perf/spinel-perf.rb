@@ -78,18 +78,29 @@ Dir.mktmpdir("spinel_perf") do |w|
   end
   abort "spinel-perf: no gmon.out — workload too short to sample; use a heavier input." if gmons.empty?
 
-  # Degrade set (methods whose --emit-rbs signature widened to untyped).
-  rbs = File.join(w, "x.rbs"); degraded = {}
-  system(SPINEL, src, "--emit-rbs", "-o", rbs, out: File::NULL, err: File::NULL)
-  if File.size?(rbs)
-    File.foreach(rbs) do |l|
-      next unless l.include?("untyped")
-      r = demangle("sp_#{$1}") if l =~ /^\s*def\s+([A-Za-z_]\w*)\s*:/
-      degraded[r] = true if r.is_a?(String)
-    end
-  end
-
   base = File.basename(src)
+  # Degrade overlay. Prefer --emit-types (POSITION-keyed): a method can have a
+  # clean signature yet box internally — the Rails-view shape @rubys flagged
+  # (spinel-dev#5), which a method-boundary scan misses. Fall back to --emit-rbs
+  # (method-granularity) if the engine predates --emit-types (#1298).
+  poly_line = {}      # lineno -> true   (position granularity, preferred)
+  poly_meth = {}      # ruby method -> true  (signature granularity, fallback)
+  overlay = :rbs
+  tjson = File.join(w, "x.json")
+  if system(SPINEL, src, "--emit-types", "-o", tjson, out: File::NULL, err: File::NULL) && File.size?(tjson)
+    (JSON.parse(File.read(tjson))["types"] rescue []).each do |t|
+      next unless t["type"].to_s.downcase =~ /poly|untyped/
+      poly_line[t["line"]] = true if File.basename(t["file"].to_s) == base
+    end
+    overlay = :types
+  else
+    rbs = File.join(w, "x.rbs")
+    system(SPINEL, src, "--emit-rbs", "-o", rbs, out: File::NULL, err: File::NULL)
+    File.foreach(rbs) { |l| (r = demangle("sp_#{$1}")) && (poly_meth[r] = true) if File.size?(rbs) && l.include?("untyped") && l =~ /^\s*def\s+([A-Za-z_]\w*)\s*:/ } if File.size?(rbs)
+  end
+  # Is the hot (method, line) on the boxed slow path? Per-line when we have it.
+  is_poly = ->(m, l) { overlay == :types ? !!poly_line[l] : !!poly_meth[m] }
+
   lines = Hash.new(0.0)   # [ruby_method, lineno] -> self%
   runtime_pct = 0.0
   # gprof -l flat rows:  "%  cum  self  [calls ns ns]  sp_fn (file.rb:NN @ addr)"
@@ -104,32 +115,42 @@ Dir.mktmpdir("spinel_perf") do |w|
   end
 
   # Per-method rollup is stable across runs; per-line is sample-limited (gprof's
-  # 10ms granularity jitters the exact line on short workloads). Lead with the
-  # stable signal, show lines as detail.
+  # 10ms granularity jitters the exact line). Lead with the stable signal.
   by_method = Hash.new(0.0)
   lines.each { |(m, _), v| by_method[m] += v }
   methods = by_method.sort_by { |_, v| -v }.first(10)
   ranked = lines.sort_by { |_, v| -v }.first(12)
 
+  # THE metric @rubys's Q2 asks for: of the user self-time, how much is on the
+  # boxed slow path (hot ∧ poly)? Not poly-anywhere — poly *where it's hot*.
+  user_pct = lines.values.sum
+  hot_poly_pct = lines.sum { |(m, l), v| is_poly.call(m, l) ? v : 0.0 }
+  hot_poly_share = user_pct.zero? ? 0.0 : 100.0 * hot_poly_pct / user_pct
+
   if json
-    out = { file: src, runtime_pct: runtime_pct.round(1), runs: gmons.size,
-            methods: methods.map { |m, p| { method: m, self_pct: p.round(1), slow_path: !!degraded[m] } },
+    out = { file: src, runtime_pct: runtime_pct.round(1), runs: gmons.size, overlay: overlay,
+            hot_poly_pct_of_user: hot_poly_share.round(1),
+            methods: methods.map { |m, p| { method: m, self_pct: p.round(1) } },
             lines: ranked.map { |(m, l), p| { method: m, line: l, self_pct: p.round(1),
-              source: src_lines[l-1]&.strip, slow_path: !!degraded[m] } } }
+              source: src_lines[l-1]&.strip, slow_path: is_poly.call(m, l) } } }
     puts JSON.generate(out); next
   end
 
+  gran = overlay == :types ? "per-line via --emit-types" : "per-method via --emit-rbs (no --emit-types; coarser)"
   puts "spinel-perf: #{src}   (gprof -l, #line + -pg -O2, #{gmons.size} runs summed)"
-  puts "  ~%.0f%% of self-time is runtime/GC/inlined; user code below. ⚠ = on poly slow path.\n\n" % runtime_pct
+  puts "  ~%.0f%% of self-time is runtime/GC/inlined; the rest is user code." % runtime_pct
+  printf "  hot ∧ poly: %.0f%% of user self-time is on the boxed slow path  (⚠ overlay: %s)\n\n", hot_poly_share, gran
   puts "  hot methods (self-time, stable):"
-  methods.each { |m, pct| printf "  %5.1f%%  %s%s\n", pct, (degraded[m] ? "⚠ " : "  "), m }
+  methods.each { |m, pct| printf "  %5.1f%%  %s%s\n", pct, (lines.any? { |(mm, l), _| mm == m && is_poly.call(mm, l) } ? "⚠ " : "  "), m }
   puts "\n  hot lines (sample-limited — gprof 10ms; heavier workload = finer):"
   ranked.each do |(m, l), pct|
-    printf "  %5.1f%%  %-24s %-9s %s\n", pct, m, "#{base}:#{l}", (src_lines[l-1]&.strip || "")[0, 44]
+    printf "  %5.1f%%  %s%-22s %-9s %s\n", pct, (is_poly.call(m, l) ? "⚠ " : "  "), m, "#{base}:#{l}", (src_lines[l-1]&.strip || "")[0, 42]
   end
-  if (hs = methods.select { |m, _| degraded[m] }).any?
-    puts "\n  → hot + on the poly slow path: #{hs.first(3).map(&:first).join(', ')}"
-    puts "    (un-inferred dynamism costing you — type those to speed up.)"
+  hot_slow = ranked.select { |(m, l), _| is_poly.call(m, l) }
+  if hot_slow.any?
+    puts "\n  → hottest lines on the boxed slow path: " +
+         hot_slow.first(3).map { |(m, l), _| "#{m} @ #{base}:#{l}" }.join(", ")
+    puts "    (un-inferred dynamism, where it's hot — type those to speed up.)"
   end
-  puts "\n  (spike — gprof's per-line is coarse on short runs; perf would sharpen it but is\n   locked down here. --emit-types (#1298) would make the ⚠ per-line, not per-method.)"
+  puts "\n  (spike — gprof's per-line is coarse on short runs; a permitted `perf` would\n   sharpen it. ⚠ is #{overlay == :types ? "per-line (--emit-types)" : "per-method (--emit-rbs fallback)"}.)"
 end

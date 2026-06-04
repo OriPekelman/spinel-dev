@@ -2,14 +2,33 @@
 
 Prototype for the two questions in [docs/08](../../docs/08-perf-analysis.md):
 *"would Spinel make this much faster?"* (static) and *"why is my Spinel app
-slow?"* (dynamic). This branch is a **spike** — proving the static signal is real
-before investing; the dynamic half is sketched, not built.
+slow?"* (dynamic). This branch is a **spike**.
 
-## `speedup-estimate.rb` (static — prototyped)
+## Granularity is everything (thanks @rubys, spinel-dev#5)
 
-Runs `--emit-rbs` and scores how much dynamism survives into the binary: a high
-`untyped` ratio (the boxed poly slow path) predicts slow; concrete, numeric types
-predict fast. No measurement — a heuristic proxy.
+Sam Ruby's key correction: a *method-signature* scan (`--emit-rbs`) is blind to
+boxing *inside* a method body — clean `(self) -> String` boundaries whose loops
+build strings and dispatch dynamically. So it **structurally over-predicts** on
+Rails-shaped code. The fix is two steps of granularity. On a method that builds a
+heterogeneous array internally (`churn`, in the tests):
+
+| scan | `churn` untyped | what it sees |
+|---|---|---|
+| `--emit-rbs` (signature) | **0 %** | `(Integer) -> Integer` — clean, misses it |
+| `--emit-types` (position, #1298) | **10.6 %** | catches the 5 poly positions — but unweighted |
+| **hot ∧ poly** (position × profile) | **100 %** | the poly is *where all the time goes* |
+
+Each step reveals more, and **hot-weighting is the load-bearing one** — a cold
+poly position doesn't matter; a hot one is the whole cost. Both tools now use
+`--emit-types` positions (falling back to `--emit-rbs` if the engine predates
+#1298).
+
+## `speedup-estimate.rb` (static — no run)
+
+Scores the **position-level** `untyped`/`poly` share (`--emit-types`): high →
+slow, concrete/numeric → fast. The cheap "should I port this gem?" gate. It's
+unweighted (can't know which positions are hot), so it still over-predicts for
+code like `churn` — that's what `spinel-perf` corrects.
 
 ```sh
 SPINEL_DIR=~/sites/spinel ruby speedup-estimate.rb fib.rb
@@ -68,21 +87,26 @@ Two honest caveats it surfaced:
 ## `spinel-perf.rb` — the "why slow" profiler (working, per-line)
 
 Compiles `-g -pg -O2` (the `#line` build, so the line table points at the `.rb`;
-gprof since `perf` is locked down at `perf_event_paranoid=4` here), runs it a few
-times and sums the profiles, then turns gprof's `-l` *line-level* `sp_<method>`
-profile back into Ruby — de-mangled to a method, with the **source text** and the
-`--emit-rbs` degrade overlay. `--json` for tooling.
+gprof since `perf` is locked down at `perf_event_paranoid=4` here), sums a few
+runs' profiles, and turns gprof's `-l` *line-level* `sp_<method>` profile back
+into Ruby — de-mangled, with the **source text** and a **per-line** `--emit-types`
+poly overlay. The headline is **hot ∧ poly**: how much of user self-time sits on
+the boxed slow path. `--json` for tooling.
 
 ```
-$ SPINEL_DIR=~/sites/spinel ruby spinel-perf.rb bm_ao_render.rb
-  hot methods (self-time, stable):
-   16.0%   Vec#pool_recycle
-   12.0%   Plane#intersect
-   12.0%   Sphere#intersect
-    8.0%   Scene#ambient_occlusion
-  hot lines (sample-limited — gprof 10ms; heavier workload = finer):
-    4.0%   Scene#ambient_occlusion  bm_ao_render.rb:242  x = Math.cos(phi) * Math.sqrt(1.0 - r)
+$ SPINEL_DIR=~/sites/spinel ruby spinel-perf.rb churn.rb
+  hot ∧ poly: 100% of user self-time is on the boxed slow path  (per-line via --emit-types)
+   22.2%  ⚠ churn                  churn.rb:9  s = a[j].to_s
+$ ... bm_ao_render.rb   (cleanly typed numeric)
+  hot ∧ poly: 0% ...
+   16.0%    Vec#pool_recycle
+   12.0%    Plane#intersect
 ```
+
+`churn` is the demonstration: `--emit-rbs` calls it clean (`(Integer)->Integer`),
+so the old per-method overlay scored **0%** — but the time is entirely on
+`a[j].to_s` where `a` is `poly_array`, which `--emit-types` flags and the hot
+weighting puts at **100%**. Exactly the over-prediction @rubys called out.
 
 ### What "usability for perf data" needed (and the real limit)
 

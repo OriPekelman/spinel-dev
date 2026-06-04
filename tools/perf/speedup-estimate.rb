@@ -26,23 +26,36 @@ json = ARGV.delete("--json")
 src = ARGV[0] or abort "usage: speedup-estimate.rb [--json] <program.rb>"
 abort "no such file: #{src}" unless File.file?(src)
 
-rbs_path = "#{src}.estimate.rbs"
-system(SPINEL, src, "--emit-rbs", "-o", rbs_path, out: File::NULL, err: File::NULL)
-abort "speedup-estimate: --emit-rbs produced nothing (does it compile?)" unless File.size?(rbs_path)
-rbs = File.read(rbs_path)
-File.delete(rbs_path)
+# Prefer --emit-types (POSITION granularity): a method can have a clean
+# signature yet box internally (the Rails-view shape @rubys flagged on
+# spinel-dev#5), which a method-boundary --emit-rbs scan misses. The untyped
+# share at position level is a much truer "how much dynamism survives" signal.
+# Fall back to --emit-rbs (signature granularity) if the engine predates
+# --emit-types (#1298).
+tmp = "#{src}.estimate.json"
+granularity = "position (--emit-types)"
+if system(SPINEL, src, "--emit-types", "-o", tmp, out: File::NULL, err: File::NULL) && File.size?(tmp)
+  ts = (JSON.parse(File.read(tmp))["types"] rescue [])
+  File.delete(tmp)
+  abort "speedup-estimate: no inferred types (does it compile?)" if ts.empty?
+  types     = ts.map { |t| t["type"].to_s }
+  numeric   = types.count { |t| %w[int float bool].include?(t) }
+  container = types.count { |t| t =~ /\A(.*array|.*hash|set|range)/i }
+  untyped   = types.count { |t| t =~ /poly|untyped/ }
+else
+  rbs_path = "#{src}.estimate.rbs"
+  system(SPINEL, src, "--emit-rbs", "-o", rbs_path, out: File::NULL, err: File::NULL)
+  abort "speedup-estimate: neither --emit-types nor --emit-rbs produced output" unless File.size?(rbs_path)
+  rbs = File.read(rbs_path); File.delete(rbs_path)
+  granularity = "signature (--emit-rbs fallback — misses intra-method boxing)"
+  sig = rbs.lines.select { |l| l =~ /^\s*def / }
+  types     = sig.flat_map { |l| l.split(":", 2)[1].to_s.scan(/[A-Z][A-Za-z0-9_:]*|untyped|bool/) }
+  numeric   = types.count { |t| %w[Integer Float bool].include?(t) }
+  container = types.count { |t| t =~ /\A(Array|Hash|Set|Range)/ }
+  untyped   = types.count("untyped")
+end
 
-sig_lines = rbs.lines.select { |l| l =~ /^\s*def / }
-methods   = sig_lines.size
-degraded  = rbs.lines.count { |l| l.include?("# spinel: widened") }
-# Count type tokens on the right of each `def ... :` signature.
-types = sig_lines.flat_map { |l| l.split(":", 2)[1].to_s.scan(/[A-Z][A-Za-z0-9_:]*|untyped|bool/) }
-numeric   = types.count { |t| %w[Integer Float bool].include?(t) }
-container = types.count { |t| t =~ /\A(Array|Hash|Set|Range)/ }
-untyped   = types.count("untyped")
-concrete  = types.size - untyped
-
-untyped_ratio = methods.zero? ? 0.0 : untyped.to_f / [types.size, 1].max
+untyped_ratio = types.empty? ? 0.0 : untyped.to_f / types.size
 numeric_share = types.empty? ? 0.0 : numeric.to_f / types.size
 
 # Heuristic score in [-1, 1]: numeric/concrete pushes toward "faster",
@@ -56,8 +69,8 @@ verdict =
   end
 
 result = {
-  file: src, methods: methods, degraded_methods: degraded,
-  type_tokens: types.size, numeric: numeric, container: container, untyped: untyped,
+  file: src, granularity: granularity,
+  type_positions: types.size, numeric: numeric, container: container, untyped: untyped,
   untyped_ratio: untyped_ratio.round(3), numeric_share: numeric_share.round(3),
   score: score.round(3), verdict: verdict,
 }
@@ -66,10 +79,11 @@ if json
   puts JSON.generate(result)
 else
   puts "speedup-estimate: #{src}"
-  puts "  methods            #{methods}  (#{degraded} degraded to untyped)"
-  puts "  type mix           numeric=#{numeric}  container=#{container}  untyped=#{untyped}  / #{types.size} tokens"
+  puts "  granularity        #{granularity}"
+  puts "  type mix           numeric=#{numeric}  container=#{container}  untyped/poly=#{untyped}  / #{types.size} positions"
   puts "  untyped ratio      #{(untyped_ratio*100).round(1)}%   numeric share #{(numeric_share*100).round(1)}%"
   puts "  verdict            #{verdict}"
   puts
-  puts "  (spike heuristic — static proxy via --emit-rbs degrade scan; validate vs a benchmark corpus)"
+  puts "  (spike heuristic — static, no run. For 'why slow / how much of the time',"
+  puts "   run spinel-perf.rb: it weights the poly positions by the hot-frame profile.)"
 end
