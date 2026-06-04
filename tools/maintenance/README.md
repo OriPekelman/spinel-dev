@@ -37,10 +37,11 @@ Env: `FORK_DIR` (~/sites/spinel), `BRANCH` (feat/typing), `UPSTREAM_REMOTE`
 ## Scheduled (gx10)
 
 A user crontab runs it daily (~08:47 local), **verify-only**, logging to
-`/srv/data/scratch/spinel-rebase.log`:
+`~/logs/spinel-rebase.log` (`tail -f` it; moved 2026-06-04 from
+`/srv/data/scratch/`):
 
 ```
-47 8 * * * .../rebase-and-verify.sh >> /srv/data/scratch/spinel-rebase.log 2>&1
+47 8 * * * .../rebase-and-verify.sh >> ~/logs/spinel-rebase.log 2>&1
 ```
 
 Verify-only is the safe default: the daily run is an **early-warning detector**
