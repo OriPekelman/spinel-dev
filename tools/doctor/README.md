@@ -7,14 +7,22 @@ Spinel — the cheap-to-expensive battery in one report.
 ./doctor.sh [--json] [--no-bisect] path/to/program.rb [-- program-args...]
 ```
 
-It runs four checks, escalating in cost and in what they catch:
+It runs five checks, escalating in cost and in what they catch:
 
 | Check | How | Catches |
 |---|---|---|
+| **require** | `spinel -c`, scrape `… the (call\|require) is ignored` | an **ignored `require`** — a wrong relative path or an unshipped stdlib that Spinel silently drops. If it defines a module the program calls, *every* call to that module then emits 0. The prime suspect for an emit-0 cascade ([spinel-dev#9](https://github.com/OriPekelman/spinel-dev/issues/9)) |
 | **compile** | `spinel -c`, scrape `cannot resolve call … (emitting 0)` | a call Spinel can't lower — it silently emits `0`/`nil` |
 | **inference** | `spinel --emit-rbs`, find `# spinel: widened` | a method whose param/return fell to the boxed `untyped` slow path |
 | **disagree** | cross-reference the two legs above | **inference↔codegen disagreement** — codegen emits-0 a call to a method *inference resolved* on a user class. The static silent-miscompile fingerprint ([spinel-dev#9](https://github.com/OriPekelman/spinel-dev/issues/9)) |
 | **behavior** | the value-bisection harness vs CRuby (`../value-bisect`) | a **silent miscompile** — the binary computes a wrong value with no warning |
+
+The **require** check gets top billing because an ignored require is the cheapest
+root cause of the scariest symptom: a real toy blocker was `require_relative
+"../tinynn"` off by one directory → `TinyNN` never loaded → every `TinyNN.tnn_*`
+call resolved "on int" and emitted 0 → zero weights → loss stuck at 0. doctor now
+names the ignored require *and* correlates it to the emit-0 cascade below it,
+instead of burying it among 40 look-alike `on int` lines.
 
 The **disagree** check is the static counterpart to behavior: when `--emit-rbs`
 resolves a method (e.g. `Engine#realize!`, or a `X.new` constructor) but the

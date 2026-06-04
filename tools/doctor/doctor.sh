@@ -57,6 +57,16 @@ nlines() { if [ -z "$1" ]; then echo 0; else printf '%s\n' "$1" | grep -c .; fi;
 UNRESOLVED=$(grep -E "cannot resolve call" "$WORK/cc.out" 2>/dev/null | sed 's/^[[:space:]]*//')
 N_UNRESOLVED=$(nlines "$UNRESOLVED")
 
+# 1b. Ignored requires (spinel-dev#9 re-scope). A require Spinel can't resolve — a
+# wrong relative path, or a stdlib it doesn't ship — is silently dropped. If it
+# defines a module the program then calls, EVERY call to that module resolves
+# "on int → emitting 0". So an ignored require is the PRIME SUSPECT for an emit-0
+# cascade and deserves top billing, not a buried warning. (A real toy blocker:
+# `require_relative "../tinynn"` off by one dir → TinyNN never loads → all
+# `TinyNN.tnn_*` emit 0 → zero weights → CE=0.)
+IGNORED_REQ=$(grep -iE "(call|require) is ignored" "$WORK/cc.out" 2>/dev/null | sed 's/^[[:space:]]*//; s/^warning: //')
+N_IGNORED_REQ=$(nlines "$IGNORED_REQ")
+
 # 2. Inference scan: methods that widened to untyped (the # spinel: comments).
 "$SPINEL" "$SRC" --emit-rbs -o "$WORK/x.rbs" >/dev/null 2>&1
 DEGRADED=$(grep -E "# spinel: widened" "$WORK/x.rbs" 2>/dev/null | sed 's/ # spinel:.*//; s/^[[:space:]]*//')
@@ -118,6 +128,12 @@ fi
 # its own tier between them.
 OVERALL="clean"
 if [ "$N_UNRESOLVED" -gt 0 ] || [ "$N_DEGRADED" -gt 0 ]; then OVERALL="degrades"; fi
+# An ignored require is itself a degrade; paired with an emit-0 cascade it's the
+# likely root cause, so escalate to the static-miscompile tier.
+if [ "$N_IGNORED_REQ" -gt 0 ]; then
+  [ "$OVERALL" = "clean" ] && OVERALL="degrades"
+  if [ "$N_UNRESOLVED" -gt 0 ] || [ "$N_DISAGREE" -gt 0 ]; then OVERALL="miscompile-risk"; fi
+fi
 if [ "$N_DISAGREE" -gt 0 ]; then OVERALL="miscompile-risk"; fi
 if [ "$BEHAVIOR" = "diverge" ] || [ "$BEHAVIOR" = "crash" ] || [ "$BEHAVIOR" = "abort" ] || [ "$BEHAVIOR" = "output-differ" ]; then OVERALL="miscompiles"; fi
 
@@ -125,14 +141,17 @@ if [ "$JSON" -eq 1 ]; then
   python3 - "$SRC" "$OVERALL" "$N_UNRESOLVED" "$N_DEGRADED" "$N_UNTYPED" "$BEHAVIOR" "$WORK/cc.out" "$WORK/x.rbs" "$BEHAVIOR_JSON" "$WORK/disagree.txt" <<'PY'
 import sys, json, re
 src, overall, nu, nd, nt, behavior, ccpath, rbspath, bjson, dispath = sys.argv[1:11]
-unresolved = [l.strip() for l in open(ccpath, errors="replace") if "cannot resolve call" in l]
+cc = open(ccpath, errors="replace").read().splitlines()
+unresolved = [l.strip() for l in cc if "cannot resolve call" in l]
+ignored_requires = [re.sub(r"^\s*warning:\s*", "", l).strip()
+                    for l in cc if re.search(r"(call|require) is ignored", l, re.I)]
 degraded = [re.sub(r" # spinel:.*", "", l).strip() for l in open(rbspath, errors="replace") if "# spinel: widened" in l]
 try:
     disagreements = [l.strip() for l in open(dispath, errors="replace") if l.strip()]
 except OSError:
     disagreements = []
 out = {"file": src, "verdict": overall,
-       "compile": {"unresolved_calls": unresolved},
+       "compile": {"unresolved_calls": unresolved, "ignored_requires": ignored_requires},
        "inference": {"degraded_methods": degraded, "untyped_count": int(nt or 0)},
        "disagreements": disagreements,
        "behavior": (json.loads(bjson) if bjson and bjson != "null" else behavior)}
@@ -143,6 +162,14 @@ fi
 
 # Human report.
 printf 'spinel doctor: %s\n' "$SRC"
+if [ "$N_IGNORED_REQ" -gt 0 ]; then
+  printf '  require    ✗ %s ignored require(s) — PRIME SUSPECT for emit-0 cascades:\n' "$N_IGNORED_REQ"
+  printf '%s\n' "$IGNORED_REQ" | sed 's/^/               - /'
+  if [ "$N_UNRESOLVED" -gt 0 ]; then
+    printf '             ↳ likely the root cause of the %s unresolved call(s) below: an unloaded\n' "$N_UNRESOLVED"
+    printf '               module makes every call to it resolve "on int" and emit 0.\n'
+  fi
+fi
 if [ "$N_UNRESOLVED" -gt 0 ]; then
   printf '  compile    ⚠ %s unresolved call(s) — Spinel silently emits 0:\n' "$N_UNRESOLVED"
   printf '%s\n' "$UNRESOLVED" | sed 's/^/               - /'

@@ -108,6 +108,12 @@ end
 # A finding = one degrade signal, with a text we match the allowlist against.
 def findings_for(rep)
   f = []
+  # An ignored require is the prime suspect for an emit-0 cascade (#9) — surfaced
+  # first, allowlistable (a benign stdlib like `'time'` can be acknowledged; a
+  # wrong-path require then still fails CI).
+  (rep.dig("compile", "ignored_requires") || []).each do |r|
+    f << { kind: "ignored-require", text: r.to_s, hard: false }
+  end
   (rep.dig("compile", "unresolved_calls") || []).each do |c|
     f << { kind: "unresolved", text: c.to_s, hard: false }
   end
