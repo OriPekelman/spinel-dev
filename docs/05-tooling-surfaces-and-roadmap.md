@@ -98,9 +98,32 @@ This is where Spinel is actually developed (agents) and where gems get gated.
    miscompiles (e.g. `abbrev`'s hash-iteration bug).
 2. **Per-method variable scoping** — key locals by `(method, var)` not just
    `(file, var)`, so same-named locals in different methods of one file don't
-   merge. Needs a stable Spinel↔CRuby method-name mapping (mangling-aware).
+   merge. Needs a stable Spinel↔CRuby method-name mapping (mangling-aware) —
+   the same artifact the perf tools currently mirror by hand. Upstream RFC:
+   [matz/spinel#1334](https://github.com/matz/spinel/issues/1334) (`--emit-symbol-map`).
 3. **`caller`** — the runtime `sp_caller_now()` is built; it needs a codegen
-   dispatch site (`Kernel#caller` is currently unsupported).
+   dispatch site (`Kernel#caller` is currently unsupported). Upstream RFC:
+   [matz/spinel#1335](https://github.com/matz/spinel/issues/1335).
+
+### G. What the tooling still wants from the compiler (upstream RFCs)
+
+The merged surfaces (`--emit-rbs`/`--emit-types`/`--debug`/native backtrace) cover
+what the tools *need*. Three RFCs ask for what would make them sharper — filed
+RFC-style on `matz/spinel`, each an opt-in, output-neutral *export of what the
+compiler already knows*, in the lineage of the merged five:
+
+- **[#1334](https://github.com/matz/spinel/issues/1334)** `--emit-symbol-map` —
+  serialize the `sp_<sym>` ↔ `Class#method` + position map `sp_bt_symbol` already
+  builds at runtime, so `tools/perf/` stops re-implementing the mangling (E2 above
+  consumes the same map). *Cheap.*
+- **[#1335](https://github.com/matz/spinel/issues/1335)** wire `Kernel#caller` to
+  `sp_caller_now()` — a Ruby-level call tree for the profiler + harness (E3). *Cheap.*
+- **[#1336](https://github.com/matz/spinel/issues/1336)** native sampling profiler
+  (`spinel --profile`) — folded Ruby stacks via the backtrace machinery, replacing
+  the approximate/locked-down `gprof`/`perf` path. *Bigger; the largest perf-story
+  unlock.* Adjacent: allocation-profiling hooks (exact GC attribution) and DWARF
+  variable-location fidelity under `--debug` (reliable heap-local reads for the
+  bisector).
 
 ### F. Packaging & upstreaming
 
