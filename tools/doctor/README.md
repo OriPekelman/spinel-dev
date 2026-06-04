@@ -7,7 +7,7 @@ Spinel — the cheap-to-expensive battery in one report.
 ./doctor.sh [--json] [--no-bisect] path/to/program.rb [-- program-args...]
 ```
 
-It runs five checks, escalating in cost and in what they catch:
+It runs six checks, escalating in cost and in what they catch:
 
 | Check | How | Catches |
 |---|---|---|
@@ -15,7 +15,14 @@ It runs five checks, escalating in cost and in what they catch:
 | **compile** | `spinel -c`, scrape `cannot resolve call … (emitting 0)` | a call Spinel can't lower — it silently emits `0`/`nil` |
 | **inference** | `spinel --emit-rbs`, find `# spinel: widened` | a method whose param/return fell to the boxed `untyped` slow path |
 | **disagree** | cross-reference the two legs above | **inference↔codegen disagreement** — codegen emits-0 a call to a method *inference resolved* on a user class. The static silent-miscompile fingerprint ([spinel-dev#9](https://github.com/OriPekelman/spinel-dev/issues/9)) |
+| **codegen** | `cc -c` the emitted C (compile-only) | a **C build failure** — the analysis legs pass but the emitted C won't compile (a Class boxed as int, a reopened `Object` struct, an undeclared local). Classified `incompatible-type` / `unknown-type` / `redefinition` / `undeclared-identifier` / `arg-count-mismatch` with the offending symbol. The bulk of real harness finds ([spinel-dev#10](https://github.com/OriPekelman/spinel-dev/issues/10)) |
 | **behavior** | the value-bisection harness vs CRuby (`../value-bisect`) | a **silent miscompile** — the binary computes a wrong value with no warning |
+
+The **codegen** check closes the gap where the analysis legs read "clean" but
+`spinel -o` fails `cc`: it compiles the C the probe already emitted (compile-only,
+so no link/FFI-object noise) and classifies the first diagnostic. A program that
+fails `cc` now reads `verdict: codegen-error`, never `clean` — and `spinel-reduce
+--target <symbol>` can ddmin it to the minimal trigger.
 
 The **require** check gets top billing because an ignored require is the cheapest
 root cause of the scariest symptom: a real toy blocker was `require_relative
@@ -47,11 +54,14 @@ spinel doctor: app.rb
 ```
 
 `--json` emits one object (`{file, verdict, compile, inference, disagreements,
-behavior}`) with the nested bisect finding under `behavior` — for CI, agents, or a
+codegen, behavior}`) with the nested bisect finding under `behavior` and a
+`{error_class, symbol, message}` object under `codegen` — for CI, agents, or a
 pre-commit gate. `verdict` is `clean` | `degrades` | `miscompile-risk` |
-`miscompiles` (in ascending severity; `miscompile-risk` = a static disagreement
-was found, `miscompiles` = behavior-confirmed). `doctor-gate` treats a disagreement
-as an allowlistable-but-distinct finding, so a *new* one fails CI loudly.
+`miscompiles` | `codegen-error` (the last = the emitted C won't build, which
+trumps the rest since there's no binary to run). `doctor-gate` treats a
+disagreement as allowlistable-but-distinct (a *new* one fails CI loudly) and a
+codegen error as a hard, never-allowlistable failure (a non-building program is
+never acceptable).
 
 ## `doctor-gate.rb` — doctor as a CI gate
 

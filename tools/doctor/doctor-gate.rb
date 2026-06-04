@@ -126,6 +126,12 @@ def findings_for(rep)
   (rep["disagreements"] || []).each do |d|
     f << { kind: "disagreement", text: d.to_s, hard: false }
   end
+  # A codegen build failure (#10) — the program doesn't compile. Never
+  # allowlistable: a non-building program is never acceptable.
+  cg = rep["codegen"]
+  if cg
+    f << { kind: "codegen", text: "codegen #{cg['error_class']} on #{cg['symbol']}: #{cg['message']}", hard: true }
+  end
   b = rep["behavior"]
   verdict = b.is_a?(Hash) ? b["verdict"] : b
   if %w[diverge output-differ crash abort].include?(verdict)

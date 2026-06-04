@@ -112,11 +112,55 @@ for line in cc.splitlines():
 PY
 N_DISAGREE=$(nlines "$(cat "$WORK/disagree.txt" 2>/dev/null)")
 
+# 2c. Codegen/build leg (spinel-dev#10). The legs above run `spinel -c` (emit C)
+# but never compile the C, so a program that analyzes clean yet emits C that `cc`
+# rejects (a Class boxed as int, a reopened `Object` struct, an undeclared branch
+# local) reads "clean" — and those C-codegen errors are the bulk of what the
+# spinelgems harness files. Compile-only (`cc -c`, no link → skips FFI-object
+# noise) the already-emitted `x.c` and classify the first diagnostic.
+CODEGEN_CLASS=""; CODEGEN_SYM=""; CODEGEN_MSG=""; N_CODEGEN=0
+if [ -s "$WORK/x.c" ]; then
+  CFLAGS_X=$(grep -oE 'SPINEL_CFLAGS: .*\*/' "$WORK/x.c" 2>/dev/null | sed 's/.*SPINEL_CFLAGS: //; s/ \*\/.*//' | head -1)
+  if ! ${CC:-cc} -c "$WORK/x.c" -o /dev/null -w -I"$SPINEL_DIR/lib" -I"$SPINEL_DIR/lib/regexp" $CFLAGS_X >"$WORK/cc_build.out" 2>&1; then
+    CG=$(python3 - "$WORK/cc_build.out" <<'PY'
+import sys, re
+txt = open(sys.argv[1], errors="replace").read()
+m = re.search(r'error:\s*(.+)', txt)
+if m:
+    msg = m.group(1).strip()
+    q = msg.replace('‘', "'").replace('’', "'").replace('`', "'")
+    def sym(p):
+        mm = re.search(p, q); return mm.group(1) if mm else ''
+    if 'redefinition of' in q:
+        cls, s = 'redefinition', sym(r"redefinition of '([^']+)'")
+    elif 'unknown type name' in q:
+        cls, s = 'unknown-type', sym(r"unknown type name '([^']+)'")
+    elif 'undeclared' in q:
+        cls, s = 'undeclared-identifier', sym(r"'([^']+)' undeclared")
+    elif 'incompatible type for argument' in q:
+        cls, s = 'incompatible-type', sym(r"argument \d+ of '([^']+)'")
+    elif re.search(r'incompatible|makes (integer|pointer)', q):
+        cls, s = 'incompatible-type', sym(r"'([^']+)'")
+    elif re.search(r'too (many|few) arguments', q):
+        cls, s = 'arg-count-mismatch', sym(r"'([^']+)'")
+    else:
+        cls, s = 'other', sym(r"'([^']+)'")
+    print(f"{cls}\t{s}\t{msg}")
+PY
+)
+    CODEGEN_CLASS=$(printf '%s' "$CG" | cut -f1)
+    CODEGEN_SYM=$(printf '%s' "$CG" | cut -f2)
+    CODEGEN_MSG=$(printf '%s' "$CG" | cut -f3)
+    [ -n "$CODEGEN_CLASS" ] && N_CODEGEN=1
+  fi
+fi
+
 # 3. Behavior check (best-effort): the value-bisection harness vs CRuby. bisect
 # exits 1 on a real divergence, so we validate the JSON rather than the exit code.
+# Skipped when the codegen leg already failed — there's no valid binary to run.
 BEHAVIOR="skipped"
 BEHAVIOR_JSON='null'
-if [ "$DO_BISECT" -eq 1 ] && [ -x "$BISECT" ]; then
+if [ "$DO_BISECT" -eq 1 ] && [ "$N_CODEGEN" -eq 0 ] && [ -x "$BISECT" ]; then
   BJSON=$(SPINEL_DIR="$SPINEL_DIR" "$BISECT" --json $NOCRUBY_FLAG "$SRC" -- "$@" 2>/dev/null)
   V=$(printf '%s' "$BJSON" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("verdict","?"))' 2>/dev/null)
   if [ -n "$V" ]; then BEHAVIOR="$V"; BEHAVIOR_JSON="$BJSON"; else BEHAVIOR="unavailable"; fi
@@ -136,11 +180,14 @@ if [ "$N_IGNORED_REQ" -gt 0 ]; then
 fi
 if [ "$N_DISAGREE" -gt 0 ]; then OVERALL="miscompile-risk"; fi
 if [ "$BEHAVIOR" = "diverge" ] || [ "$BEHAVIOR" = "crash" ] || [ "$BEHAVIOR" = "abort" ] || [ "$BEHAVIOR" = "output-differ" ]; then OVERALL="miscompiles"; fi
+# A codegen error means the program doesn't even build — definitive, and it
+# trumps the rest (there's no binary to have behavior). Set last.
+if [ "$N_CODEGEN" -gt 0 ]; then OVERALL="codegen-error"; fi
 
 if [ "$JSON" -eq 1 ]; then
-  python3 - "$SRC" "$OVERALL" "$N_UNRESOLVED" "$N_DEGRADED" "$N_UNTYPED" "$BEHAVIOR" "$WORK/cc.out" "$WORK/x.rbs" "$BEHAVIOR_JSON" "$WORK/disagree.txt" <<'PY'
+  python3 - "$SRC" "$OVERALL" "$N_UNRESOLVED" "$N_DEGRADED" "$N_UNTYPED" "$BEHAVIOR" "$WORK/cc.out" "$WORK/x.rbs" "$BEHAVIOR_JSON" "$WORK/disagree.txt" "$CODEGEN_CLASS" "$CODEGEN_SYM" "$CODEGEN_MSG" <<'PY'
 import sys, json, re
-src, overall, nu, nd, nt, behavior, ccpath, rbspath, bjson, dispath = sys.argv[1:11]
+src, overall, nu, nd, nt, behavior, ccpath, rbspath, bjson, dispath, cg_cls, cg_sym, cg_msg = sys.argv[1:14]
 cc = open(ccpath, errors="replace").read().splitlines()
 unresolved = [l.strip() for l in cc if "cannot resolve call" in l]
 ignored_requires = [re.sub(r"^\s*warning:\s*", "", l).strip()
@@ -150,10 +197,12 @@ try:
     disagreements = [l.strip() for l in open(dispath, errors="replace") if l.strip()]
 except OSError:
     disagreements = []
+codegen = {"error_class": cg_cls, "symbol": cg_sym, "message": cg_msg} if cg_cls else None
 out = {"file": src, "verdict": overall,
        "compile": {"unresolved_calls": unresolved, "ignored_requires": ignored_requires},
        "inference": {"degraded_methods": degraded, "untyped_count": int(nt or 0)},
        "disagreements": disagreements,
+       "codegen": codegen,
        "behavior": (json.loads(bjson) if bjson and bjson != "null" else behavior)}
 print(json.dumps(out))
 PY
@@ -186,6 +235,12 @@ if [ "$N_DISAGREE" -gt 0 ]; then
   printf '  disagree   ✗ %s inference↔codegen DISAGREEMENT(s) — the silent-miscompile fingerprint:\n' "$N_DISAGREE"
   printf '             (inference resolves the method on a user class; codegen lost the receiver and emits 0)\n'
   cat "$WORK/disagree.txt" | sed 's/^/               - /'
+fi
+if [ "$N_CODEGEN" -gt 0 ]; then
+  printf '  codegen    ✗ C build FAILS [%s] on %s — the emitted C does not compile:\n' "$CODEGEN_CLASS" "${CODEGEN_SYM:-?}"
+  printf '               %s\n' "$CODEGEN_MSG"
+else
+  printf '  codegen    ✓ emitted C compiles\n'
 fi
 case "$BEHAVIOR" in
   ok)          printf '  behavior   ✓ matches CRuby (value-bisection)\n' ;;

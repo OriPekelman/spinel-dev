@@ -14,9 +14,12 @@ SPINEL_DIR=~/sites/spinel ruby spinel-reduce.rb [--target SUBSTR] \
     [--no-cruby] [--keep-bisect] [-o min.rb] <degrading.rb>
 ```
 
-- **target** — a substring of the finding to preserve. Default: the first
-  inference↔codegen disagreement (the silent-miscompile fingerprint), else the
-  first unresolved call, else the first widened method. Override with `--target`.
+- **target** — a substring of the finding to preserve. Default (most actionable
+  first): a **codegen build error** (the failing C symbol, e.g. `sp_box_int` —
+  [spinel-dev#10](https://github.com/OriPekelman/spinel-dev/issues/10)), else the
+  inference↔codegen disagreement, else an ignored require, else an unresolved
+  call, else a widened method. Override with `--target` (e.g. `--target sp_box_int`,
+  `--target "incompatible type"`).
 - **`--no-cruby`** — FFI/AOT-only app (single-sided doctor behavior leg), so it
   works where there's no CRuby oracle.
 - **`--keep-bisect`** — also require the behavior verdict to reproduce (slow; for

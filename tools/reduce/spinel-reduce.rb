@@ -65,7 +65,14 @@ def doctor_findings(path, opts)
   out, _err, _st = Open3.capture3({ "SPINEL_DIR" => SPINEL_DIR }, *cmd)
   rep = (JSON.parse(out) rescue {})
   f = []
+  cg = rep["codegen"]
+  if cg
+    sym = cg["symbol"].to_s.strip
+    f << (sym.empty? ? "codegen #{cg['error_class']}" : "codegen #{cg['error_class']} #{sym}")
+    f << cg["message"].to_s unless cg["message"].to_s.empty?
+  end
   f.concat(rep["disagreements"] || [])
+  f.concat(rep.dig("compile", "ignored_requires") || [])
   f.concat(rep.dig("compile", "unresolved_calls") || [])
   f.concat(rep.dig("inference", "degraded_methods") || [])
   b = rep["behavior"]
@@ -158,12 +165,18 @@ end
 # ---- pick the target ----
 orig = File.readlines(src) # keep line endings
 base = doctor_findings(src, opts)
+codegen  = base.select { |f| f.start_with?("codegen ") }
 disagree = base.select { |f| f.include?(" on ") && f.include?("[") }
 unresolved = base.select { |f| f.start_with?("cannot resolve") }
-widened = base.reject { |f| disagree.include?(f) || unresolved.include?(f) || f.start_with?("behavior:") }
+widened = base.reject { |f| codegen.include?(f) || disagree.include?(f) || unresolved.include?(f) || f.start_with?("behavior:") }
 
+# Severity order for the default target: a codegen build failure (the #10 case)
+# is the most actionable, then the disagreement fingerprint, then emit-0s, then a
+# widened slot. The codegen target is the failing C *symbol* (stable across the
+# reduction), not the whole message.
 target =
   if opts[:target] then opts[:target]
+  elsif !codegen.empty?    then codegen.first.split.last
   elsif !disagree.empty?   then disagree.first.split("  [").first.strip
   elsif !unresolved.empty? then unresolved.first.sub(/^warning:\s*/, "").strip
   elsif !widened.empty?    then widened.first.strip
