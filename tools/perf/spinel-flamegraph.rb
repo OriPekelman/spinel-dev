@@ -183,7 +183,20 @@ out_folded.each do |stack, w|
   end
 end
 
-COLORS = { gc: "#d62728", runtime: "#9e9e9e", user: "#1f77b4", poly: "#ff7f0e", root: "#555" }
+# leaf self-time by cost class (drives the subtitle + the stdout summary)
+by_kind = Hash.new(0.0)
+out_folded.each { |stack, w| by_kind[leaf_class[stack.split(";").last] || :runtime] += w }
+
+COLORS = { gc: "#d64541", runtime: "#9aa0a6", user: "#2a72c8", poly: "#f08c1a", root: "#4a4a4a" }
+# Deterministic per-frame lighten/darken so adjacent same-class frames are
+# distinguishable (the classic flamegraph look) without Math.random.
+def jitter(hex, name)
+  r = hex[1, 2].to_i(16); g = hex[3, 2].to_i(16); b = hex[5, 2].to_i(16)
+  d = (name.bytes.sum % 36) - 14
+  cl = ->(v) { x = v + d; x < 0 ? 0 : (x > 255 ? 255 : x) }
+  format("#%02x%02x%02x", cl.call(r), cl.call(g), cl.call(b))
+end
+
 rects = []
 emit = lambda do |node, depth, x0|
   w_px = (node[:val] / total) * (WIDTH - 2 * PAD)
@@ -198,28 +211,34 @@ emit = lambda do |node, depth, x0|
 end
 emit.call(root, 0, PAD)
 max_depth = rects.map { |r| r[:depth] }.max + 1
-height = max_depth * FRAME_H + 2 * PAD + 20
+HEADER = 40
+height = max_depth * FRAME_H + PAD + HEADER
 
-svg = +%(<svg xmlns="http://www.w3.org/2000/svg" width="#{WIDTH}" height="#{height}" font-family="Verdana" font-size="#{FONT}">\n)
-svg << %(<rect width="#{WIDTH}" height="#{height}" fill="#f8f8f8"/>\n)
-svg << %(<text x="#{PAD}" y="14" font-size="13" font-weight="bold">Spinel flamegraph — GC/alloc=red, runtime=grey, user Ruby (Class#method)=blue</text>\n)
+esc = ->(s) { s.to_s.gsub('&', '&amp;').gsub('<', '&lt;').gsub('>', '&gt;') }
+sub = [:gc, :runtime, :user].select { |k| by_kind[k] > 0 }
+        .map { |k| "#{k} #{(100.0 * by_kind[k] / total).round(1)}%" }.join("  ·  ")
+
+svg = +%(<svg xmlns="http://www.w3.org/2000/svg" width="#{WIDTH}" height="#{height}" font-family="Helvetica,Arial,sans-serif" font-size="#{FONT}">\n)
+svg << %(<rect width="#{WIDTH}" height="#{height}" fill="#ffffff"/>\n)
+svg << %(<text x="#{PAD}" y="18" font-size="14" font-weight="bold" fill="#222">Spinel flamegraph — frames are Ruby methods (Class#method)</text>\n)
+svg << %(<text x="#{PAD}" y="33" font-size="11" fill="#555">leaf self-time: #{sub}   ·   GC/alloc=red, runtime=grey, user Ruby=blue   ·   hover a frame for %</text>\n)
 rects.each do |r|
-  next if r[:w] < 0.4
+  next if r[:w] < 0.3
   y = height - PAD - (r[:depth] + 1) * FRAME_H
-  fill = COLORS[r[:kind]] || COLORS[:runtime]
-  label = r[:name].length * 7 < r[:w] ? r[:name] : ""
-  title = "#{r[:name]} (#{r[:pct].round(1)}%)"
-  svg << %(<g><title>#{title.gsub('&','&amp;').gsub('<','&lt;')}</title>)
-  svg << %(<rect x="#{r[:x].round(1)}" y="#{y}" width="#{r[:w].round(1)}" height="#{FRAME_H - 1}" fill="#{fill}" stroke="#fff" stroke-width="0.3"/>)
-  svg << %(<text x="#{(r[:x] + 2).round(1)}" y="#{y + FRAME_H - 4}" fill="#fff">#{label.gsub('&','&amp;').gsub('<','&lt;')}</text></g>\n) unless label.empty?
-  svg << "</g>\n" if label.empty?
+  base = COLORS[r[:kind]] || COLORS[:runtime]
+  fill = r[:kind] == :root ? base : jitter(base, r[:name])
+  maxc = ((r[:w] - 6) / 6.2).floor # fit / ellipsize label to frame width
+  label = maxc >= 3 ? (r[:name].length <= maxc ? r[:name] : r[:name][0, maxc - 1] + "…") : ""
+  tcol = r[:kind] == :runtime ? "#1a1a1a" : "#ffffff"
+  svg << %(<g><title>#{esc.call(r[:name])}  (#{r[:pct].round(2)}%)</title>)
+  svg << %(<rect x="#{r[:x].round(1)}" y="#{y}" width="#{[r[:w] - 0.5, 0.5].max.round(1)}" height="#{FRAME_H - 1}" rx="1.5" fill="#{fill}"/>)
+  svg << %(<text x="#{(r[:x] + 3).round(1)}" y="#{y + FRAME_H - 5}" fill="#{tcol}">#{esc.call(label)}</text>) unless label.empty?
+  svg << "</g>\n"
 end
 svg << "</svg>\n"
 File.write(out_svg, svg)
 
 # ---- summary to stdout ----
-by_kind = Hash.new(0.0)
-out_folded.each { |stack, w| by_kind[leaf_class[stack.split(";").last] || :runtime] += w }
 puts "spinel-flamegraph: #{out_svg}  (folded: #{folded_path})"
 puts "  leaf self-time by class:"
 [:gc, :runtime, :user, :poly].each do |k|

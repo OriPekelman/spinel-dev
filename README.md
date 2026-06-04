@@ -27,7 +27,8 @@ Compile-probe + inference-degrade scan + behavior check in one command. Tells
 you, for a given program: does it compile, which calls degrade to the silent
 slow path (e.g. *unresolved call → emits 0*), which methods widened to
 `untyped`, and — when the program runs under CRuby — whether its output matches.
-Human-readable or `--json`.
+Human-readable or `--json`. `doctor-gate` wraps it for CI: an allowlist of
+known-degraded sites, non-zero exit on a *new* degrade or a miscompile.
 
 ### value-bisect — differential value localization
 [`tools/value-bisect/`](tools/value-bisect/) · `bisect.sh [--json] <program.rb>`
@@ -46,6 +47,27 @@ test-suite failure the same way. Consumed by `spinelgems verify` to upgrade a
 A ruby-lsp addon that surfaces Spinel's per-node type inference on hover, and
 flags where a type degraded to the boxed poly slow path — directly attacking the
 silent-miscompile problem at authoring time.
+
+### performance analysis — *would it be faster? why is it slow?*
+[`tools/perf/`](tools/perf/)
+
+The same inference + `#line` substrate, turned on speed. `speedup-estimate`
+scores a program's `untyped`/poly density (the static "should I port this gem?"
+gate); `spinel-perf` profiles a `-pg` build and maps hot frames back to Ruby
+lines with a **GC-vs-user self-time split**; `rbs-disagree` finds positions where
+the compiler's inference disagrees with a consumer's (a candidate-bug localizer —
+[it found one](https://github.com/matz/spinel/pull/1330)). And `spinel-flamegraph`
+renders the call hierarchy with frames demangled to `Class#method`:
+
+![Spinel flamegraph of the roundhouse Rails blog — ~72% of self-time is GC/alloc, in red](docs/img/blog-flamegraph.svg)
+
+That's an AOT-compiled Rails blog under load. The flame is ~72% red at the
+leaves: every hot path (`Tep::Request#new`, `ActiveRecord::Base#save`,
+`ActionView::ViewHelpers.*`) bottoms out in `sp_gc_alloc`. The win over CRuby is
+real but capped at ~1.5–1.9× here — because this workload is **allocation-bound,
+not boxing-bound**, a decomposition the flamegraph makes legible at a glance.
+Write-up: [docs/08](docs/08-perf-analysis.md), discussion on
+[spinel-dev#5](https://github.com/OriPekelman/spinel-dev/issues/5)/[#7](https://github.com/OriPekelman/spinel-dev/issues/7).
 
 ## Getting started
 

@@ -1,0 +1,335 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="274" font-family="Helvetica,Arial,sans-serif" font-size="11">
+<rect width="1200" height="274" fill="#ffffff"/>
+<text x="10" y="18" font-size="14" font-weight="bold" fill="#222">Spinel flamegraph — frames are Ruby methods (Class#method)</text>
+<text x="10" y="33" font-size="11" fill="#555">leaf self-time: gc 72.4%  ·  runtime 16.4%  ·  user 11.2%   ·   GC/alloc=red, runtime=grey, user Ruby=blue   ·   hover a frame for %</text>
+<g><title>all  (100.0%)</title><rect x="10" y="248" width="1179.5" height="15" rx="1.5" fill="#4a4a4a"/><text x="13" y="259" fill="#ffffff">all</text></g>
+<g><title>main  (86.34%)</title><rect x="10" y="232" width="1018.3" height="15" rx="1.5" fill="#a5abb1"/><text x="13" y="243" fill="#1a1a1a">main</text></g>
+<g><title>_fiber_body_4  (77.03%)</title><rect x="10" y="216" width="908.5" height="15" rx="1.5" fill="#a7adb3"/><text x="13" y="227" fill="#1a1a1a">_fiber_body_4</text></g>
+<g><title>fiber_trampoline  (74.49%)</title><rect x="10" y="200" width="878.4" height="15" rx="1.5" fill="#92989e"/><text x="13" y="211" fill="#1a1a1a">fiber_trampoline</text></g>
+<g><title>_fiber_body_3  (74.49%)</title><rect x="10" y="184" width="878.4" height="15" rx="1.5" fill="#a6acb2"/><text x="13" y="195" fill="#1a1a1a">_fiber_body_3</text></g>
+<g><title>ActiveRecord::Base#save  (40.09%)</title><rect x="10" y="168" width="472.6" height="15" rx="1.5" fill="#2870c6"/><text x="13" y="179" fill="#ffffff">ActiveRecord::Base#save</text></g>
+<g><title>Main.nest_params  (8.73%)</title><rect x="10" y="152" width="102.6" height="15" rx="1.5" fill="#3c84da"/><text x="13" y="163" fill="#ffffff">Main.nest_para…</text></g>
+<g><title>Main.deep_dup  (5.72%)</title><rect x="10" y="136" width="67.0" height="15" rx="1.5" fill="#2971c7"/><text x="13" y="147" fill="#ffffff">Main.dee…</text></g>
+<g><title>StrPolyHash_new  (2.77%)</title><rect x="10" y="120" width="32.2" height="15" rx="1.5" fill="#aeb4ba"/><text x="13" y="131" fill="#1a1a1a">Str…</text></g>
+<g><title>gc_alloc  (2.77%)</title><rect x="10" y="104" width="32.2" height="15" rx="1.5" fill="#e4534f"/><text x="13" y="115" fill="#ffffff">gc_…</text></g>
+<g><title>StrStrHash_scan  (0.05%)</title><rect x="10" y="88" width="0.5" height="15" rx="1.5" fill="#9ea4aa"/></g>
+<g><title>Tep_Request_gc_scan  (0.04%)</title><rect x="10.6" y="88" width="0.5" height="15" rx="1.5" fill="#ce3d39"/></g>
+<g><title>SymStrHash_fin  (0.03%)</title><rect x="11.0" y="88" width="0.5" height="15" rx="1.5" fill="#a2a8ae"/></g>
+<g><title>PolyArray_new  (1.46%)</title><rect x="42.7" y="120" width="16.7" height="15" rx="1.5" fill="#a4aab0"/></g>
+<g><title>gc_alloc  (1.46%)</title><rect x="42.7" y="104" width="16.7" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>PolyArray_push  (0.38%)</title><rect x="59.9" y="120" width="4.0" height="15" rx="1.5" fill="#aeb4ba"/></g>
+<g><title>Tep::Stream#pool_recycle  (0.24%)</title><rect x="64.4" y="120" width="2.4" height="15" rx="1.5" fill="#246cc2"/></g>
+<g><title>StrPolyHash_set  (0.1%)</title><rect x="67.3" y="120" width="0.6" height="15" rx="1.5" fill="#8c9298"/></g>
+<g><title>Tep.str_hash  (2.99%)</title><rect x="77.5" y="136" width="34.8" height="15" rx="1.5" fill="#2b73c9"/><text x="80.5" y="147" fill="#ffffff">Tep…</text></g>
+<g><title>StrStrHash_new  (2.92%)</title><rect x="77.5" y="120" width="33.9" height="15" rx="1.5" fill="#afb5bb"/><text x="80.5" y="131" fill="#1a1a1a">Str…</text></g>
+<g><title>gc_alloc  (2.92%)</title><rect x="77.5" y="104" width="33.9" height="15" rx="1.5" fill="#e4534f"/><text x="80.5" y="115" fill="#ffffff">gc_…</text></g>
+<g><title>StrStrHash_scan  (0.05%)</title><rect x="77.5" y="88" width="0.5" height="15" rx="1.5" fill="#9ea4aa"/></g>
+<g><title>Tep_Request_gc_scan  (0.04%)</title><rect x="78.1" y="88" width="0.5" height="15" rx="1.5" fill="#ce3d39"/></g>
+<g><title>SymStrHash_fin  (0.03%)</title><rect x="78.6" y="88" width="0.5" height="15" rx="1.5" fill="#a2a8ae"/></g>
+<g><title>StrStrHash_set  (0.07%)</title><rect x="111.9" y="120" width="0.5" height="15" rx="1.5" fill="#8d9399"/></g>
+<g><title>str_length  (0.03%)</title><rect x="112.7" y="136" width="0.5" height="15" rx="1.5" fill="#8e949a"/></g>
+<g><title>Views::Articles.show  (6.28%)</title><rect x="113.1" y="152" width="73.6" height="15" rx="1.5" fill="#2c74ca"/><text x="116.1" y="163" fill="#ffffff">Views::Ar…</text></g>
+<g><title>ActionView::ViewHelpers.turbo_stream_from  (1.69%)</title><rect x="113.1" y="136" width="19.4" height="15" rx="1.5" fill="#236bc1"/></g>
+<g><title>String_new  (0.53%)</title><rect x="113.1" y="120" width="5.7" height="15" rx="1.5" fill="#989ea4"/></g>
+<g><title>gc_alloc  (0.53%)</title><rect x="113.1" y="104" width="5.7" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>str_sub_range  (0.33%)</title><rect x="119.3" y="120" width="3.4" height="15" rx="1.5" fill="#a2a8ae"/></g>
+<g><title>str_length  (0.19%)</title><rect x="119.3" y="104" width="1.7" height="15" rx="1.5" fill="#8e949a"/></g>
+<g><title>str_bytes  (0.24%)</title><rect x="123.2" y="120" width="2.4" height="15" rx="1.5" fill="#9fa5ab"/></g>
+<g><title>IntArray_new  (0.24%)</title><rect x="123.2" y="104" width="2.4" height="15" rx="1.5" fill="#979da3"/></g>
+<g><title>gc_alloc  (0.24%)</title><rect x="123.2" y="88" width="2.4" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>str_length  (0.18%)</title><rect x="126.0" y="120" width="1.7" height="15" rx="1.5" fill="#8e949a"/></g>
+<g><title>Article#comments  (1.52%)</title><rect x="132.9" y="136" width="17.4" height="15" rx="1.5" fill="#3981d7"/></g>
+<g><title>Comment.from_stmt  (1.2%)</title><rect x="132.9" y="120" width="13.7" height="15" rx="1.5" fill="#3880d6"/></g>
+<g><title>Comment#new  (0.64%)</title><rect x="132.9" y="104" width="7.0" height="15" rx="1.5" fill="#246cc2"/></g>
+<g><title>gc_alloc  (0.49%)</title><rect x="132.9" y="88" width="5.3" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>StrIntHash_has_key  (0.15%)</title><rect x="138.7" y="88" width="1.3" height="15" rx="1.5" fill="#afb5bb"/></g>
+<g><title>StrIntHash_new  (0.49%)</title><rect x="140.5" y="104" width="5.2" height="15" rx="1.5" fill="#a1a7ad"/></g>
+<g><title>gc_alloc  (0.49%)</title><rect x="140.5" y="88" width="5.2" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>Db.column_text  (0.08%)</title><rect x="146.2" y="104" width="0.5" height="15" rx="1.5" fill="#266ec4"/></g>
+<g><title>PtrArray_new_scan  (0.24%)</title><rect x="147.1" y="120" width="2.4" height="15" rx="1.5" fill="#aeb4ba"/></g>
+<g><title>gc_alloc  (0.24%)</title><rect x="147.1" y="104" width="2.4" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>Db.prepare  (0.08%)</title><rect x="150.0" y="120" width="0.5" height="15" rx="1.5" fill="#377fd5"/></g>
+<g><title>ActionDispatch::Router.match  (1.51%)</title><rect x="150.9" y="136" width="17.3" height="15" rx="1.5" fill="#2a72c8"/></g>
+<g><title>str_split  (1.11%)</title><rect x="150.9" y="120" width="12.6" height="15" rx="1.5" fill="#a4aab0"/></g>
+<g><title>gc_alloc  (0.97%)</title><rect x="150.9" y="104" width="11.0" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>StrStrHash_new  (0.24%)</title><rect x="164.0" y="120" width="2.4" height="15" rx="1.5" fill="#afb5bb"/></g>
+<g><title>gc_alloc  (0.24%)</title><rect x="164.0" y="104" width="2.4" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>String_new  (0.53%)</title><rect x="168.7" y="136" width="5.7" height="15" rx="1.5" fill="#989ea4"/></g>
+<g><title>gc_alloc  (0.53%)</title><rect x="168.7" y="120" width="5.7" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>Comment#new  (0.32%)</title><rect x="174.9" y="136" width="3.3" height="15" rx="1.5" fill="#246cc2"/></g>
+<g><title>gc_alloc  (0.24%)</title><rect x="174.9" y="120" width="2.4" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>StrIntHash_has_key  (0.08%)</title><rect x="177.8" y="120" width="0.5" height="15" rx="1.5" fill="#afb5bb"/></g>
+<g><title>ActionView::ViewHelpers.html_escape  (0.25%)</title><rect x="178.7" y="136" width="2.4" height="15" rx="1.5" fill="#2a72c8"/></g>
+<g><title>re_gsub_str_str_hash  (0.12%)</title><rect x="178.7" y="120" width="0.9" height="15" rx="1.5" fill="#9aa0a6"/></g>
+<g><title>StrIntHash_new  (0.24%)</title><rect x="181.6" y="136" width="2.4" height="15" rx="1.5" fill="#a1a7ad"/></g>
+<g><title>gc_alloc  (0.24%)</title><rect x="181.6" y="120" width="2.4" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>ActionView::ViewHelpers.method_override_input  (0.1%)</title><rect x="184.5" y="136" width="0.7" height="15" rx="1.5" fill="#3c84da"/></g>
+<g><title>sprintf  (0.1%)</title><rect x="184.5" y="120" width="0.7" height="15" rx="1.5" fill="#9ea4aa"/></g>
+<g><title>sprintf  (0.1%)</title><rect x="185.6" y="136" width="0.7" height="15" rx="1.5" fill="#9ea4aa"/></g>
+<g><title>ActionView::ViewHelpers.escape_or_empty  (0.04%)</title><rect x="186.8" y="136" width="0.5" height="15" rx="1.5" fill="#347cd2"/></g>
+<g><title>ActionView::ViewHelpers.html_escape  (0.04%)</title><rect x="186.8" y="120" width="0.5" height="15" rx="1.5" fill="#2a72c8"/></g>
+<g><title>ActionDispatch::Router.match  (4.53%)</title><rect x="187.2" y="152" width="52.9" height="15" rx="1.5" fill="#2a72c8"/><text x="190.2" y="163" fill="#ffffff">Action…</text></g>
+<g><title>str_split  (3.32%)</title><rect x="187.2" y="136" width="38.7" height="15" rx="1.5" fill="#a4aab0"/><text x="190.2" y="147" fill="#1a1a1a">str_…</text></g>
+<g><title>gc_alloc  (2.92%)</title><rect x="187.2" y="120" width="33.9" height="15" rx="1.5" fill="#e4534f"/><text x="190.2" y="131" fill="#ffffff">gc_…</text></g>
+<g><title>StrStrHash_scan  (0.05%)</title><rect x="187.2" y="104" width="0.5" height="15" rx="1.5" fill="#9ea4aa"/></g>
+<g><title>Tep_Request_gc_scan  (0.04%)</title><rect x="187.8" y="104" width="0.5" height="15" rx="1.5" fill="#ce3d39"/></g>
+<g><title>SymStrHash_fin  (0.03%)</title><rect x="188.3" y="104" width="0.5" height="15" rx="1.5" fill="#a2a8ae"/></g>
+<g><title>StrStrHash_new  (0.73%)</title><rect x="226.4" y="136" width="8.1" height="15" rx="1.5" fill="#afb5bb"/></g>
+<g><title>gc_alloc  (0.73%)</title><rect x="226.4" y="120" width="8.1" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>Views::Articles.index  (3.79%)</title><rect x="240.6" y="152" width="44.2" height="15" rx="1.5" fill="#3b83d9"/><text x="243.6" y="163" fill="#ffffff">Views…</text></g>
+<g><title>ActionView::ViewHelpers.turbo_stream_from  (1.69%)</title><rect x="240.6" y="136" width="19.4" height="15" rx="1.5" fill="#236bc1"/></g>
+<g><title>String_new  (0.53%)</title><rect x="240.6" y="120" width="5.7" height="15" rx="1.5" fill="#989ea4"/></g>
+<g><title>gc_alloc  (0.53%)</title><rect x="240.6" y="104" width="5.7" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>str_sub_range  (0.33%)</title><rect x="246.8" y="120" width="3.4" height="15" rx="1.5" fill="#a2a8ae"/></g>
+<g><title>str_length  (0.19%)</title><rect x="246.8" y="104" width="1.7" height="15" rx="1.5" fill="#8e949a"/></g>
+<g><title>str_bytes  (0.24%)</title><rect x="250.7" y="120" width="2.4" height="15" rx="1.5" fill="#9fa5ab"/></g>
+<g><title>IntArray_new  (0.24%)</title><rect x="250.7" y="104" width="2.4" height="15" rx="1.5" fill="#979da3"/></g>
+<g><title>gc_alloc  (0.24%)</title><rect x="250.7" y="88" width="2.4" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>str_length  (0.18%)</title><rect x="253.6" y="120" width="1.7" height="15" rx="1.5" fill="#8e949a"/></g>
+<g><title>ActionDispatch::Router.match  (1.51%)</title><rect x="260.5" y="136" width="17.3" height="15" rx="1.5" fill="#2a72c8"/></g>
+<g><title>str_split  (1.11%)</title><rect x="260.5" y="120" width="12.6" height="15" rx="1.5" fill="#a4aab0"/></g>
+<g><title>gc_alloc  (0.97%)</title><rect x="260.5" y="104" width="11.0" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>StrStrHash_new  (0.24%)</title><rect x="273.5" y="120" width="2.4" height="15" rx="1.5" fill="#afb5bb"/></g>
+<g><title>gc_alloc  (0.24%)</title><rect x="273.5" y="104" width="2.4" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>String_new  (0.53%)</title><rect x="278.3" y="136" width="5.7" height="15" rx="1.5" fill="#989ea4"/></g>
+<g><title>gc_alloc  (0.53%)</title><rect x="278.3" y="120" width="5.7" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>ActionView::ViewHelpers.html_escape  (0.04%)</title><rect x="284.5" y="136" width="0.5" height="15" rx="1.5" fill="#2a72c8"/></g>
+<g><title>sprintf  (0.03%)</title><rect x="284.9" y="136" width="0.5" height="15" rx="1.5" fill="#9ea4aa"/></g>
+<g><title>Article.from_stmt  (2.95%)</title><rect x="285.3" y="152" width="34.3" height="15" rx="1.5" fill="#2971c7"/><text x="288.3" y="163" fill="#ffffff">Art…</text></g>
+<g><title>Article#new  (1.88%)</title><rect x="285.3" y="136" width="21.7" height="15" rx="1.5" fill="#3981d7"/></g>
+<g><title>gc_alloc  (0.73%)</title><rect x="285.3" y="120" width="8.1" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>PtrArray_new_scan  (0.73%)</title><rect x="293.9" y="120" width="8.1" height="15" rx="1.5" fill="#aeb4ba"/></g>
+<g><title>gc_alloc  (0.73%)</title><rect x="293.9" y="104" width="8.1" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>StrIntHash_has_key  (0.19%)</title><rect x="302.5" y="120" width="1.7" height="15" rx="1.5" fill="#afb5bb"/></g>
+<g><title>StrIntHash_new  (0.73%)</title><rect x="307.5" y="136" width="8.1" height="15" rx="1.5" fill="#a1a7ad"/></g>
+<g><title>gc_alloc  (0.73%)</title><rect x="307.5" y="120" width="8.1" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>Db.column_text  (0.11%)</title><rect x="316.1" y="136" width="0.8" height="15" rx="1.5" fill="#266ec4"/></g>
+<g><title>PtrArray_new_scan  (2.68%)</title><rect x="320.1" y="152" width="31.1" height="15" rx="1.5" fill="#aeb4ba"/><text x="323.1" y="163" fill="#1a1a1a">Ptr…</text></g>
+<g><title>gc_alloc  (2.68%)</title><rect x="320.1" y="136" width="31.1" height="15" rx="1.5" fill="#e4534f"/><text x="323.1" y="147" fill="#ffffff">gc_…</text></g>
+<g><title>StrStrHash_scan  (0.05%)</title><rect x="320.1" y="120" width="0.5" height="15" rx="1.5" fill="#9ea4aa"/></g>
+<g><title>Tep_Request_gc_scan  (0.04%)</title><rect x="320.7" y="120" width="0.5" height="15" rx="1.5" fill="#ce3d39"/></g>
+<g><title>SymStrHash_fin  (0.03%)</title><rect x="321.1" y="120" width="0.5" height="15" rx="1.5" fill="#a2a8ae"/></g>
+<g><title>Routes.table  (2.51%)</title><rect x="351.7" y="152" width="29.1" height="15" rx="1.5" fill="#3078ce"/><text x="354.7" y="163" fill="#ffffff">Ro…</text></g>
+<g><title>ActionDispatch::Router::Route#new  (1.4%)</title><rect x="351.7" y="136" width="16.0" height="15" rx="1.5" fill="#2f77cd"/></g>
+<g><title>PtrArray_new_scan  (0.73%)</title><rect x="368.2" y="136" width="8.1" height="15" rx="1.5" fill="#aeb4ba"/></g>
+<g><title>gc_alloc  (0.73%)</title><rect x="368.2" y="120" width="8.1" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>Article.find  (2.5%)</title><rect x="381.3" y="152" width="29.0" height="15" rx="1.5" fill="#2f77cd"/><text x="384.3" y="163" fill="#ffffff">Ar…</text></g>
+<g><title>Article.from_stmt  (1.97%)</title><rect x="381.3" y="136" width="22.7" height="15" rx="1.5" fill="#2971c7"/></g>
+<g><title>Article#new  (1.25%)</title><rect x="381.3" y="120" width="14.3" height="15" rx="1.5" fill="#3981d7"/></g>
+<g><title>gc_alloc  (0.49%)</title><rect x="381.3" y="104" width="5.3" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>PtrArray_new_scan  (0.49%)</title><rect x="387.1" y="104" width="5.2" height="15" rx="1.5" fill="#aeb4ba"/></g>
+<g><title>gc_alloc  (0.49%)</title><rect x="387.1" y="88" width="5.2" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>StrIntHash_has_key  (0.13%)</title><rect x="392.8" y="104" width="1.0" height="15" rx="1.5" fill="#afb5bb"/></g>
+<g><title>StrIntHash_new  (0.49%)</title><rect x="396.1" y="120" width="5.2" height="15" rx="1.5" fill="#a1a7ad"/></g>
+<g><title>gc_alloc  (0.49%)</title><rect x="396.1" y="104" width="5.2" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>Db.column_text  (0.08%)</title><rect x="401.8" y="120" width="0.5" height="15" rx="1.5" fill="#266ec4"/></g>
+<g><title>Db.prepare  (0.15%)</title><rect x="404.5" y="136" width="1.3" height="15" rx="1.5" fill="#377fd5"/></g>
+<g><title>Comment.from_stmt  (1.8%)</title><rect x="410.8" y="152" width="20.8" height="15" rx="1.5" fill="#3880d6"/></g>
+<g><title>Comment#new  (0.96%)</title><rect x="410.8" y="136" width="10.8" height="15" rx="1.5" fill="#246cc2"/></g>
+<g><title>gc_alloc  (0.73%)</title><rect x="410.8" y="120" width="8.1" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>StrIntHash_has_key  (0.23%)</title><rect x="419.4" y="120" width="2.2" height="15" rx="1.5" fill="#afb5bb"/></g>
+<g><title>StrIntHash_new  (0.73%)</title><rect x="422.1" y="136" width="8.1" height="15" rx="1.5" fill="#a1a7ad"/></g>
+<g><title>gc_alloc  (0.73%)</title><rect x="422.1" y="120" width="8.1" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>Db.column_text  (0.11%)</title><rect x="430.7" y="136" width="0.8" height="15" rx="1.5" fill="#266ec4"/></g>
+<g><title>Views::Articles.show_json  (1.68%)</title><rect x="432.1" y="152" width="19.3" height="15" rx="1.5" fill="#2971c7"/></g>
+<g><title>Views::Articles.article_json  (1.15%)</title><rect x="432.1" y="136" width="13.1" height="15" rx="1.5" fill="#2c74ca"/></g>
+<g><title>String_new  (0.53%)</title><rect x="432.1" y="120" width="5.7" height="15" rx="1.5" fill="#989ea4"/></g>
+<g><title>gc_alloc  (0.53%)</title><rect x="432.1" y="104" width="5.7" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>JsonBuilder.encode_datetime  (0.16%)</title><rect x="438.3" y="120" width="1.4" height="15" rx="1.5" fill="#3981d7"/></g>
+<g><title>sprintf  (0.07%)</title><rect x="438.3" y="104" width="0.5" height="15" rx="1.5" fill="#9ea4aa"/></g>
+<g><title>str_sub_range  (0.06%)</title><rect x="439.1" y="104" width="0.5" height="15" rx="1.5" fill="#a2a8ae"/></g>
+<g><title>str_length  (0.04%)</title><rect x="439.1" y="88" width="0.5" height="15" rx="1.5" fill="#8e949a"/></g>
+<g><title>str_length  (0.03%)</title><rect x="439.8" y="104" width="0.5" height="15" rx="1.5" fill="#8e949a"/></g>
+<g><title>JsonBuilder.encode_value  (0.07%)</title><rect x="440.1" y="120" width="0.5" height="15" rx="1.5" fill="#2971c7"/></g>
+<g><title>sprintf  (0.05%)</title><rect x="440.1" y="104" width="0.5" height="15" rx="1.5" fill="#9ea4aa"/></g>
+<g><title>String_new  (0.53%)</title><rect x="445.7" y="136" width="5.7" height="15" rx="1.5" fill="#989ea4"/></g>
+<g><title>gc_alloc  (0.53%)</title><rect x="445.7" y="120" width="5.7" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>Main.instantiate_controller  (0.73%)</title><rect x="451.9" y="152" width="8.1" height="15" rx="1.5" fill="#1e66bc"/></g>
+<g><title>StrIntHash_new  (0.73%)</title><rect x="451.9" y="136" width="8.1" height="15" rx="1.5" fill="#a1a7ad"/></g>
+<g><title>gc_alloc  (0.73%)</title><rect x="451.9" y="120" width="8.1" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>SymPolyHash_new  (0.73%)</title><rect x="460.5" y="152" width="8.1" height="15" rx="1.5" fill="#aeb4ba"/></g>
+<g><title>gc_alloc  (0.73%)</title><rect x="460.5" y="136" width="8.1" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>IntArray_new  (0.24%)</title><rect x="469.1" y="152" width="2.4" height="15" rx="1.5" fill="#979da3"/></g>
+<g><title>gc_alloc  (0.24%)</title><rect x="469.1" y="136" width="2.4" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>Db.escape_int_list  (0.24%)</title><rect x="472.0" y="152" width="2.4" height="15" rx="1.5" fill="#1e66bc"/></g>
+<g><title>gc_alloc  (0.24%)</title><rect x="472.0" y="136" width="2.4" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>ActionDispatch::Router::Route#new  (0.16%)</title><rect x="474.9" y="152" width="1.3" height="15" rx="1.5" fill="#2f77cd"/></g>
+<g><title>Db.prepare  (0.15%)</title><rect x="476.7" y="152" width="1.3" height="15" rx="1.5" fill="#377fd5"/></g>
+<g><title>Tep::Request#new  (27.33%)</title><rect x="483.1" y="168" width="322.0" height="15" rx="1.5" fill="#276fc5"/><text x="486.1" y="179" fill="#ffffff">Tep::Request#new</text></g>
+<g><title>Tep.str_hash  (26.14%)</title><rect x="483.1" y="152" width="308.0" height="15" rx="1.5" fill="#2b73c9"/><text x="486.1" y="163" fill="#ffffff">Tep.str_hash</text></g>
+<g><title>StrStrHash_new  (25.54%)</title><rect x="483.1" y="136" width="300.8" height="15" rx="1.5" fill="#afb5bb"/><text x="486.1" y="147" fill="#1a1a1a">StrStrHash_new</text></g>
+<g><title>gc_alloc  (25.54%)</title><rect x="483.1" y="120" width="300.8" height="15" rx="1.5" fill="#e4534f"/><text x="486.1" y="131" fill="#ffffff">gc_alloc</text></g>
+<g><title>StrStrHash_scan  (0.44%)</title><rect x="483.1" y="104" width="4.6" height="15" rx="1.5" fill="#9ea4aa"/></g>
+<g><title>Tep_Request_gc_scan  (0.38%)</title><rect x="488.2" y="104" width="4.0" height="15" rx="1.5" fill="#ce3d39"/></g>
+<g><title>gc_mark  (0.09%)</title><rect x="488.2" y="88" width="0.5" height="15" rx="1.5" fill="#cc3b37"/></g>
+<g><title>SymStrHash_fin  (0.29%)</title><rect x="492.7" y="104" width="2.9" height="15" rx="1.5" fill="#a2a8ae"/></g>
+<g><title>StrStrHash_fin  (0.14%)</title><rect x="496.1" y="104" width="1.2" height="15" rx="1.5" fill="#a2a8ae"/></g>
+<g><title>PtrArray_fin  (0.14%)</title><rect x="497.8" y="104" width="1.2" height="15" rx="1.5" fill="#959ba1"/></g>
+<g><title>StrPolyHash_fin  (0.14%)</title><rect x="499.5" y="104" width="1.2" height="15" rx="1.5" fill="#a1a7ad"/></g>
+<g><title>StrStrHash_set  (0.6%)</title><rect x="784.4" y="136" width="6.6" height="15" rx="1.5" fill="#8d9399"/></g>
+<g><title>gc_alloc  (0.04%)</title><rect x="791.5" y="152" width="0.5" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>gc_alloc  (1.47%)</title><rect x="805.5" y="168" width="16.8" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>str_split  (0.83%)</title><rect x="822.9" y="168" width="9.3" height="15" rx="1.5" fill="#a4aab0"/></g>
+<g><title>gc_alloc  (0.73%)</title><rect x="822.9" y="152" width="8.1" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>Tep.str_hash  (0.75%)</title><rect x="832.7" y="168" width="8.3" height="15" rx="1.5" fill="#2b73c9"/></g>
+<g><title>StrStrHash_new  (0.73%)</title><rect x="832.7" y="152" width="8.1" height="15" rx="1.5" fill="#afb5bb"/></g>
+<g><title>gc_alloc  (0.73%)</title><rect x="832.7" y="136" width="8.1" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>Tep::Stream#pool_recycle  (0.73%)</title><rect x="841.5" y="168" width="8.1" height="15" rx="1.5" fill="#246cc2"/></g>
+<g><title>_fiber_body_2  (0.65%)</title><rect x="850.1" y="168" width="7.2" height="15" rx="1.5" fill="#a5abb1"/></g>
+<g><title>Tep::Stream#pool_recycle  (0.18%)</title><rect x="850.1" y="152" width="1.6" height="15" rx="1.5" fill="#246cc2"/></g>
+<g><title>str_length  (0.07%)</title><rect x="852.2" y="152" width="0.5" height="15" rx="1.5" fill="#8e949a"/></g>
+<g><title>str_index  (0.38%)</title><rect x="857.7" y="168" width="4.0" height="15" rx="1.5" fill="#90969c"/></g>
+<g><title>Tep::Scheduler.io_wait  (0.38%)</title><rect x="862.2" y="168" width="4.0" height="15" rx="1.5" fill="#266ec4"/></g>
+<g><title>str_sub_range  (0.17%)</title><rect x="866.7" y="168" width="1.5" height="15" rx="1.5" fill="#a2a8ae"/></g>
+<g><title>str_length  (0.1%)</title><rect x="866.7" y="152" width="0.6" height="15" rx="1.5" fill="#8e949a"/></g>
+<g><title>str_length  (0.13%)</title><rect x="868.7" y="168" width="1.1" height="15" rx="1.5" fill="#8e949a"/></g>
+<g><title>StrStrHash_set  (0.05%)</title><rect x="870.3" y="168" width="0.5" height="15" rx="1.5" fill="#8d9399"/></g>
+<g><title>IntArray_new  (0.82%)</title><rect x="888.9" y="200" width="9.2" height="15" rx="1.5" fill="#979da3"/></g>
+<g><title>gc_alloc  (0.82%)</title><rect x="888.9" y="184" width="9.2" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>fiber_trampoline  (9.31%)</title><rect x="919.0" y="216" width="109.4" height="15" rx="1.5" fill="#92989e"/><text x="922.0" y="227" fill="#1a1a1a">fiber_trampoline</text></g>
+<g><title>_fiber_body_3  (9.31%)</title><rect x="919.0" y="200" width="109.4" height="15" rx="1.5" fill="#a6acb2"/><text x="922.0" y="211" fill="#1a1a1a">_fiber_body_3</text></g>
+<g><title>ActiveRecord::Base#save  (5.01%)</title><rect x="919.0" y="184" width="58.6" height="15" rx="1.5" fill="#2870c6"/><text x="922.0" y="195" fill="#ffffff">ActiveR…</text></g>
+<g><title>Main.nest_params  (1.09%)</title><rect x="919.0" y="168" width="12.4" height="15" rx="1.5" fill="#3c84da"/></g>
+<g><title>Main.deep_dup  (0.71%)</title><rect x="919.0" y="152" width="7.9" height="15" rx="1.5" fill="#2971c7"/></g>
+<g><title>StrPolyHash_new  (0.35%)</title><rect x="919.0" y="136" width="3.6" height="15" rx="1.5" fill="#aeb4ba"/></g>
+<g><title>gc_alloc  (0.35%)</title><rect x="919.0" y="120" width="3.6" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>PolyArray_new  (0.18%)</title><rect x="923.1" y="136" width="1.7" height="15" rx="1.5" fill="#a4aab0"/></g>
+<g><title>gc_alloc  (0.18%)</title><rect x="923.1" y="120" width="1.7" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>PolyArray_push  (0.05%)</title><rect x="925.2" y="136" width="0.5" height="15" rx="1.5" fill="#aeb4ba"/></g>
+<g><title>Tep::Stream#pool_recycle  (0.03%)</title><rect x="925.8" y="136" width="0.5" height="15" rx="1.5" fill="#246cc2"/></g>
+<g><title>Tep.str_hash  (0.37%)</title><rect x="927.4" y="152" width="3.9" height="15" rx="1.5" fill="#2b73c9"/></g>
+<g><title>StrStrHash_new  (0.36%)</title><rect x="927.4" y="136" width="3.8" height="15" rx="1.5" fill="#afb5bb"/></g>
+<g><title>gc_alloc  (0.36%)</title><rect x="927.4" y="120" width="3.8" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>Views::Articles.show  (0.79%)</title><rect x="931.9" y="168" width="8.8" height="15" rx="1.5" fill="#2c74ca"/></g>
+<g><title>ActionView::ViewHelpers.turbo_stream_from  (0.21%)</title><rect x="931.9" y="152" width="2.0" height="15" rx="1.5" fill="#236bc1"/></g>
+<g><title>String_new  (0.07%)</title><rect x="931.9" y="136" width="0.5" height="15" rx="1.5" fill="#989ea4"/></g>
+<g><title>gc_alloc  (0.07%)</title><rect x="931.9" y="120" width="0.5" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>str_sub_range  (0.04%)</title><rect x="932.6" y="136" width="0.5" height="15" rx="1.5" fill="#a2a8ae"/></g>
+<g><title>str_bytes  (0.03%)</title><rect x="933.1" y="136" width="0.5" height="15" rx="1.5" fill="#9fa5ab"/></g>
+<g><title>IntArray_new  (0.03%)</title><rect x="933.1" y="120" width="0.5" height="15" rx="1.5" fill="#979da3"/></g>
+<g><title>gc_alloc  (0.03%)</title><rect x="933.1" y="104" width="0.5" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>Article#comments  (0.19%)</title><rect x="934.3" y="152" width="1.7" height="15" rx="1.5" fill="#3981d7"/></g>
+<g><title>Comment.from_stmt  (0.15%)</title><rect x="934.3" y="136" width="1.3" height="15" rx="1.5" fill="#3880d6"/></g>
+<g><title>Comment#new  (0.08%)</title><rect x="934.3" y="120" width="0.5" height="15" rx="1.5" fill="#246cc2"/></g>
+<g><title>gc_alloc  (0.06%)</title><rect x="934.3" y="104" width="0.5" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>StrIntHash_new  (0.06%)</title><rect x="935.3" y="120" width="0.5" height="15" rx="1.5" fill="#a1a7ad"/></g>
+<g><title>gc_alloc  (0.06%)</title><rect x="935.3" y="104" width="0.5" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>PtrArray_new_scan  (0.03%)</title><rect x="936.1" y="136" width="0.5" height="15" rx="1.5" fill="#aeb4ba"/></g>
+<g><title>gc_alloc  (0.03%)</title><rect x="936.1" y="120" width="0.5" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>ActionDispatch::Router.match  (0.19%)</title><rect x="936.6" y="152" width="1.7" height="15" rx="1.5" fill="#2a72c8"/></g>
+<g><title>str_split  (0.14%)</title><rect x="936.6" y="136" width="1.1" height="15" rx="1.5" fill="#a4aab0"/></g>
+<g><title>gc_alloc  (0.12%)</title><rect x="936.6" y="120" width="0.9" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>StrStrHash_new  (0.03%)</title><rect x="938.2" y="136" width="0.5" height="15" rx="1.5" fill="#afb5bb"/></g>
+<g><title>gc_alloc  (0.03%)</title><rect x="938.2" y="120" width="0.5" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>String_new  (0.07%)</title><rect x="938.8" y="152" width="0.5" height="15" rx="1.5" fill="#989ea4"/></g>
+<g><title>gc_alloc  (0.07%)</title><rect x="938.8" y="136" width="0.5" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>Comment#new  (0.04%)</title><rect x="939.6" y="152" width="0.5" height="15" rx="1.5" fill="#246cc2"/></g>
+<g><title>gc_alloc  (0.03%)</title><rect x="939.6" y="136" width="0.5" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>ActionView::ViewHelpers.html_escape  (0.03%)</title><rect x="940.1" y="152" width="0.5" height="15" rx="1.5" fill="#2a72c8"/></g>
+<g><title>StrIntHash_new  (0.03%)</title><rect x="940.4" y="152" width="0.5" height="15" rx="1.5" fill="#a1a7ad"/></g>
+<g><title>gc_alloc  (0.03%)</title><rect x="940.4" y="136" width="0.5" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>ActionDispatch::Router.match  (0.57%)</title><rect x="941.1" y="168" width="6.2" height="15" rx="1.5" fill="#2a72c8"/></g>
+<g><title>str_split  (0.42%)</title><rect x="941.1" y="152" width="4.4" height="15" rx="1.5" fill="#a4aab0"/></g>
+<g><title>gc_alloc  (0.36%)</title><rect x="941.1" y="136" width="3.8" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>StrStrHash_new  (0.09%)</title><rect x="946.0" y="152" width="0.6" height="15" rx="1.5" fill="#afb5bb"/></g>
+<g><title>gc_alloc  (0.09%)</title><rect x="946.0" y="136" width="0.6" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>Views::Articles.index  (0.47%)</title><rect x="947.8" y="168" width="5.1" height="15" rx="1.5" fill="#3b83d9"/></g>
+<g><title>ActionView::ViewHelpers.turbo_stream_from  (0.21%)</title><rect x="947.8" y="152" width="2.0" height="15" rx="1.5" fill="#236bc1"/></g>
+<g><title>String_new  (0.07%)</title><rect x="947.8" y="136" width="0.5" height="15" rx="1.5" fill="#989ea4"/></g>
+<g><title>gc_alloc  (0.07%)</title><rect x="947.8" y="120" width="0.5" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>str_sub_range  (0.04%)</title><rect x="948.6" y="136" width="0.5" height="15" rx="1.5" fill="#a2a8ae"/></g>
+<g><title>str_bytes  (0.03%)</title><rect x="949.1" y="136" width="0.5" height="15" rx="1.5" fill="#9fa5ab"/></g>
+<g><title>IntArray_new  (0.03%)</title><rect x="949.1" y="120" width="0.5" height="15" rx="1.5" fill="#979da3"/></g>
+<g><title>gc_alloc  (0.03%)</title><rect x="949.1" y="104" width="0.5" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>ActionDispatch::Router.match  (0.19%)</title><rect x="950.3" y="152" width="1.7" height="15" rx="1.5" fill="#2a72c8"/></g>
+<g><title>str_split  (0.14%)</title><rect x="950.3" y="136" width="1.1" height="15" rx="1.5" fill="#a4aab0"/></g>
+<g><title>gc_alloc  (0.12%)</title><rect x="950.3" y="120" width="0.9" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>StrStrHash_new  (0.03%)</title><rect x="951.9" y="136" width="0.5" height="15" rx="1.5" fill="#afb5bb"/></g>
+<g><title>gc_alloc  (0.03%)</title><rect x="951.9" y="120" width="0.5" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>String_new  (0.07%)</title><rect x="952.5" y="152" width="0.5" height="15" rx="1.5" fill="#989ea4"/></g>
+<g><title>gc_alloc  (0.07%)</title><rect x="952.5" y="136" width="0.5" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>Article.from_stmt  (0.37%)</title><rect x="953.4" y="168" width="3.9" height="15" rx="1.5" fill="#2971c7"/></g>
+<g><title>Article#new  (0.23%)</title><rect x="953.4" y="152" width="2.3" height="15" rx="1.5" fill="#3981d7"/></g>
+<g><title>gc_alloc  (0.09%)</title><rect x="953.4" y="136" width="0.6" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>PtrArray_new_scan  (0.09%)</title><rect x="954.5" y="136" width="0.6" height="15" rx="1.5" fill="#aeb4ba"/></g>
+<g><title>gc_alloc  (0.09%)</title><rect x="954.5" y="120" width="0.6" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>StrIntHash_new  (0.09%)</title><rect x="956.2" y="152" width="0.6" height="15" rx="1.5" fill="#a1a7ad"/></g>
+<g><title>gc_alloc  (0.09%)</title><rect x="956.2" y="136" width="0.6" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>PtrArray_new_scan  (0.33%)</title><rect x="957.7" y="168" width="3.4" height="15" rx="1.5" fill="#aeb4ba"/></g>
+<g><title>gc_alloc  (0.33%)</title><rect x="957.7" y="152" width="3.4" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>Routes.table  (0.31%)</title><rect x="961.7" y="168" width="3.2" height="15" rx="1.5" fill="#3078ce"/></g>
+<g><title>ActionDispatch::Router::Route#new  (0.18%)</title><rect x="961.7" y="152" width="1.6" height="15" rx="1.5" fill="#2f77cd"/></g>
+<g><title>PtrArray_new_scan  (0.09%)</title><rect x="963.7" y="152" width="0.6" height="15" rx="1.5" fill="#aeb4ba"/></g>
+<g><title>gc_alloc  (0.09%)</title><rect x="963.7" y="136" width="0.6" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>Article.find  (0.31%)</title><rect x="965.4" y="168" width="3.2" height="15" rx="1.5" fill="#2f77cd"/></g>
+<g><title>Article.from_stmt  (0.25%)</title><rect x="965.4" y="152" width="2.4" height="15" rx="1.5" fill="#2971c7"/></g>
+<g><title>Article#new  (0.16%)</title><rect x="965.4" y="136" width="1.3" height="15" rx="1.5" fill="#3981d7"/></g>
+<g><title>gc_alloc  (0.06%)</title><rect x="965.4" y="120" width="0.5" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>PtrArray_new_scan  (0.06%)</title><rect x="966.1" y="120" width="0.5" height="15" rx="1.5" fill="#aeb4ba"/></g>
+<g><title>gc_alloc  (0.06%)</title><rect x="966.1" y="104" width="0.5" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>StrIntHash_new  (0.06%)</title><rect x="967.2" y="136" width="0.5" height="15" rx="1.5" fill="#a1a7ad"/></g>
+<g><title>gc_alloc  (0.06%)</title><rect x="967.2" y="120" width="0.5" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>Comment.from_stmt  (0.23%)</title><rect x="969.1" y="168" width="2.2" height="15" rx="1.5" fill="#3880d6"/></g>
+<g><title>Comment#new  (0.12%)</title><rect x="969.1" y="152" width="0.9" height="15" rx="1.5" fill="#246cc2"/></g>
+<g><title>gc_alloc  (0.09%)</title><rect x="969.1" y="136" width="0.6" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>StrIntHash_has_key  (0.03%)</title><rect x="970.1" y="136" width="0.5" height="15" rx="1.5" fill="#afb5bb"/></g>
+<g><title>StrIntHash_new  (0.09%)</title><rect x="970.5" y="152" width="0.6" height="15" rx="1.5" fill="#a1a7ad"/></g>
+<g><title>gc_alloc  (0.09%)</title><rect x="970.5" y="136" width="0.6" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>Views::Articles.show_json  (0.21%)</title><rect x="971.7" y="168" width="2.0" height="15" rx="1.5" fill="#2971c7"/></g>
+<g><title>Views::Articles.article_json  (0.14%)</title><rect x="971.7" y="152" width="1.2" height="15" rx="1.5" fill="#2c74ca"/></g>
+<g><title>String_new  (0.07%)</title><rect x="971.7" y="136" width="0.5" height="15" rx="1.5" fill="#989ea4"/></g>
+<g><title>gc_alloc  (0.07%)</title><rect x="971.7" y="120" width="0.5" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>String_new  (0.07%)</title><rect x="973.4" y="152" width="0.5" height="15" rx="1.5" fill="#989ea4"/></g>
+<g><title>gc_alloc  (0.07%)</title><rect x="973.4" y="136" width="0.5" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>Main.instantiate_controller  (0.09%)</title><rect x="974.2" y="168" width="0.6" height="15" rx="1.5" fill="#1e66bc"/></g>
+<g><title>StrIntHash_new  (0.09%)</title><rect x="974.2" y="152" width="0.6" height="15" rx="1.5" fill="#a1a7ad"/></g>
+<g><title>gc_alloc  (0.09%)</title><rect x="974.2" y="136" width="0.6" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>SymPolyHash_new  (0.09%)</title><rect x="975.3" y="168" width="0.6" height="15" rx="1.5" fill="#aeb4ba"/></g>
+<g><title>gc_alloc  (0.09%)</title><rect x="975.3" y="152" width="0.6" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>IntArray_new  (0.03%)</title><rect x="976.4" y="168" width="0.5" height="15" rx="1.5" fill="#979da3"/></g>
+<g><title>gc_alloc  (0.03%)</title><rect x="976.4" y="152" width="0.5" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>Db.escape_int_list  (0.03%)</title><rect x="976.7" y="168" width="0.5" height="15" rx="1.5" fill="#1e66bc"/></g>
+<g><title>gc_alloc  (0.03%)</title><rect x="976.7" y="152" width="0.5" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>Tep::Request#new  (3.42%)</title><rect x="978.1" y="184" width="39.8" height="15" rx="1.5" fill="#276fc5"/><text x="981.1" y="195" fill="#ffffff">Tep:…</text></g>
+<g><title>Tep.str_hash  (3.27%)</title><rect x="978.1" y="168" width="38.1" height="15" rx="1.5" fill="#2b73c9"/><text x="981.1" y="179" fill="#ffffff">Tep.…</text></g>
+<g><title>StrStrHash_new  (3.19%)</title><rect x="978.1" y="152" width="37.2" height="15" rx="1.5" fill="#afb5bb"/><text x="981.1" y="163" fill="#1a1a1a">StrS…</text></g>
+<g><title>gc_alloc  (3.19%)</title><rect x="978.1" y="136" width="37.2" height="15" rx="1.5" fill="#e4534f"/><text x="981.1" y="147" fill="#ffffff">gc_a…</text></g>
+<g><title>StrStrHash_scan  (0.05%)</title><rect x="978.1" y="120" width="0.5" height="15" rx="1.5" fill="#9ea4aa"/></g>
+<g><title>Tep_Request_gc_scan  (0.05%)</title><rect x="978.7" y="120" width="0.5" height="15" rx="1.5" fill="#ce3d39"/></g>
+<g><title>SymStrHash_fin  (0.04%)</title><rect x="979.3" y="120" width="0.5" height="15" rx="1.5" fill="#a2a8ae"/></g>
+<g><title>StrStrHash_set  (0.08%)</title><rect x="1015.8" y="152" width="0.5" height="15" rx="1.5" fill="#8d9399"/></g>
+<g><title>gc_alloc  (0.18%)</title><rect x="1018.4" y="184" width="1.7" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>str_split  (0.1%)</title><rect x="1020.6" y="184" width="0.7" height="15" rx="1.5" fill="#a4aab0"/></g>
+<g><title>gc_alloc  (0.09%)</title><rect x="1020.6" y="168" width="0.6" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>Tep.str_hash  (0.09%)</title><rect x="1021.8" y="184" width="0.6" height="15" rx="1.5" fill="#2b73c9"/></g>
+<g><title>StrStrHash_new  (0.09%)</title><rect x="1021.8" y="168" width="0.6" height="15" rx="1.5" fill="#afb5bb"/></g>
+<g><title>gc_alloc  (0.09%)</title><rect x="1021.8" y="152" width="0.6" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>Tep::Stream#pool_recycle  (0.09%)</title><rect x="1022.9" y="184" width="0.6" height="15" rx="1.5" fill="#246cc2"/></g>
+<g><title>_fiber_body_2  (0.08%)</title><rect x="1024.0" y="184" width="0.5" height="15" rx="1.5" fill="#a5abb1"/></g>
+<g><title>str_index  (0.05%)</title><rect x="1024.9" y="184" width="0.5" height="15" rx="1.5" fill="#90969c"/></g>
+<g><title>Tep::Scheduler.io_wait  (0.05%)</title><rect x="1025.5" y="184" width="0.5" height="15" rx="1.5" fill="#266ec4"/></g>
+<g><title>ActionView::ViewHelpers.stylesheet_link_tag  (11.45%)</title><rect x="1028.8" y="232" width="134.6" height="15" rx="1.5" fill="#377fd5"/><text x="1031.8" y="243" fill="#ffffff">ActionView::ViewHel…</text></g>
+<g><title>SymStrHash_new  (7.11%)</title><rect x="1028.8" y="216" width="83.4" height="15" rx="1.5" fill="#afb5bb"/><text x="1031.8" y="227" fill="#1a1a1a">SymStrHash_…</text></g>
+<g><title>gc_alloc  (7.11%)</title><rect x="1028.8" y="200" width="83.4" height="15" rx="1.5" fill="#e4534f"/><text x="1031.8" y="211" fill="#ffffff">gc_alloc</text></g>
+<g><title>StrStrHash_scan  (0.12%)</title><rect x="1028.8" y="184" width="0.9" height="15" rx="1.5" fill="#9ea4aa"/></g>
+<g><title>Tep_Request_gc_scan  (0.11%)</title><rect x="1030.3" y="184" width="0.7" height="15" rx="1.5" fill="#ce3d39"/></g>
+<g><title>SymStrHash_fin  (0.08%)</title><rect x="1031.5" y="184" width="0.5" height="15" rx="1.5" fill="#a2a8ae"/></g>
+<g><title>StrStrHash_fin  (0.04%)</title><rect x="1032.5" y="184" width="0.5" height="15" rx="1.5" fill="#a2a8ae"/></g>
+<g><title>PtrArray_fin  (0.04%)</title><rect x="1033.0" y="184" width="0.5" height="15" rx="1.5" fill="#959ba1"/></g>
+<g><title>StrPolyHash_fin  (0.04%)</title><rect x="1033.4" y="184" width="0.5" height="15" rx="1.5" fill="#a1a7ad"/></g>
+<g><title>StrPolyHash_new  (2.08%)</title><rect x="1112.8" y="216" width="24.0" height="15" rx="1.5" fill="#aeb4ba"/></g>
+<g><title>gc_alloc  (2.08%)</title><rect x="1112.8" y="200" width="24.0" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>StrStrHash_scan  (0.04%)</title><rect x="1112.8" y="184" width="0.5" height="15" rx="1.5" fill="#9ea4aa"/></g>
+<g><title>Tep_Request_gc_scan  (0.03%)</title><rect x="1113.2" y="184" width="0.5" height="15" rx="1.5" fill="#ce3d39"/></g>
+<g><title>gc_alloc  (1.09%)</title><rect x="1137.3" y="216" width="12.4" height="15" rx="1.5" fill="#e4534f"/></g>
+<g><title>ActionView::ViewHelpers.html_escape  (0.47%)</title><rect x="1150.2" y="216" width="5.1" height="15" rx="1.5" fill="#2a72c8"/></g>
+<g><title>re_gsub_str_str_hash  (0.23%)</title><rect x="1150.2" y="200" width="2.2" height="15" rx="1.5" fill="#9aa0a6"/></g>
+<g><title>sprintf  (0.37%)</title><rect x="1155.8" y="216" width="3.8" height="15" rx="1.5" fill="#9ea4aa"/></g>
+<g><title>StrPolyHash_set  (0.32%)</title><rect x="1160.2" y="216" width="3.3" height="15" rx="1.5" fill="#8c9298"/></g>
+<g><title>re_exec  (0.87%)</title><rect x="1164.0" y="232" width="9.7" height="15" rx="1.5" fill="#979da3"/></g>
+<g><title>_init  (0.43%)</title><rect x="1174.2" y="232" width="4.5" height="15" rx="1.5" fill="#a7adb3"/></g>
+<g><title>add_thread  (0.43%)</title><rect x="1179.2" y="232" width="4.5" height="15" rx="1.5" fill="#9ca2a8"/></g>
+<g><title>sphttp_write_str  (0.43%)</title><rect x="1184.3" y="232" width="4.5" height="15" rx="1.5" fill="#8d9399"/></g>
+<g><title>Inflector.pluralize  (0.06%)</title><rect x="1189.3" y="232" width="0.5" height="15" rx="1.5" fill="#3078ce"/></g>
+<g><title>sprintf  (0.06%)</title><rect x="1189.3" y="216" width="0.5" height="15" rx="1.5" fill="#9ea4aa"/></g>
+</svg>
