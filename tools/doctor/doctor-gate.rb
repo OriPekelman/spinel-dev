@@ -114,6 +114,12 @@ def findings_for(rep)
   (rep.dig("inference", "degraded_methods") || []).each do |m|
     f << { kind: "degraded", text: m.to_s, hard: false }
   end
+  # Inference↔codegen disagreements (the silent-miscompile fingerprint, #9) are
+  # allowlistable like degrades — a confirmed-dead one can be acknowledged — but
+  # surfaced as a distinct, more-severe kind, so a *new* one fails CI loudly.
+  (rep["disagreements"] || []).each do |d|
+    f << { kind: "disagreement", text: d.to_s, hard: false }
+  end
   b = rep["behavior"]
   verdict = b.is_a?(Hash) ? b["verdict"] : b
   if %w[diverge output-differ crash abort].include?(verdict)

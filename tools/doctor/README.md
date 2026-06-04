@@ -7,17 +7,25 @@ Spinel — the cheap-to-expensive battery in one report.
 ./doctor.sh [--json] [--no-bisect] path/to/program.rb [-- program-args...]
 ```
 
-It runs three checks, escalating in cost and in what they catch:
+It runs four checks, escalating in cost and in what they catch:
 
 | Check | How | Catches |
 |---|---|---|
 | **compile** | `spinel -c`, scrape `cannot resolve call … (emitting 0)` | a call Spinel can't lower — it silently emits `0`/`nil` |
 | **inference** | `spinel --emit-rbs`, find `# spinel: widened` | a method whose param/return fell to the boxed `untyped` slow path |
+| **disagree** | cross-reference the two legs above | **inference↔codegen disagreement** — codegen emits-0 a call to a method *inference resolved* on a user class. The static silent-miscompile fingerprint ([spinel-dev#9](https://github.com/OriPekelman/spinel-dev/issues/9)) |
 | **behavior** | the value-bisection harness vs CRuby (`../value-bisect`) | a **silent miscompile** — the binary computes a wrong value with no warning |
 
-Only the behavior check catches silent miscompiles (they compile clean and exit
-0), so it's the one that matters most — and it points at the variable + line.
-Use `--no-bisect` to skip it (faster; static checks only).
+The **disagree** check is the static counterpart to behavior: when `--emit-rbs`
+resolves a method (e.g. `Engine#realize!`, or a `X.new` constructor) but the
+codegen leg can't (`cannot resolve call to 'realize' on int (emitting 0)`), the
+receiver's class was *lost at codegen* while inference knew it — the call silently
+no-ops. This is the **malign** subset of `on int`: an emit-0 on a *user* method or
+constructor is a lost-receiver bug; an emit-0 on an FFI/builtin call (e.g.
+`tnn_upload` on int) is the expected `:ptr`-as-int lowering and is *not* flagged.
+It needs no CRuby oracle, so it reaches FFI/AOT-only apps where the behavior leg
+can't run. Use `--no-bisect` to skip the behavior leg (the three static checks
+still run).
 
 ## Output
 
@@ -30,9 +38,12 @@ spinel doctor: app.rb
   verdict    miscompiles
 ```
 
-`--json` emits one object (`{file, verdict, compile, inference, behavior}`) with
-the nested bisect finding under `behavior` — for CI, agents, or a pre-commit
-gate. `verdict` is `clean` | `degrades` | `miscompiles`.
+`--json` emits one object (`{file, verdict, compile, inference, disagreements,
+behavior}`) with the nested bisect finding under `behavior` — for CI, agents, or a
+pre-commit gate. `verdict` is `clean` | `degrades` | `miscompile-risk` |
+`miscompiles` (in ascending severity; `miscompile-risk` = a static disagreement
+was found, `miscompiles` = behavior-confirmed). `doctor-gate` treats a disagreement
+as an allowlistable-but-distinct finding, so a *new* one fails CI loudly.
 
 ## `doctor-gate.rb` — doctor as a CI gate
 
