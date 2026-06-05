@@ -36,11 +36,19 @@ analyzer emit modes, a wrapper flag set) was worth exercising on real apps
 | **value-bisect** harness + **triage** | *where* a compiled binary first diverges from CRuby (var/line) or crashes | CRuby is a ready-made oracle (the `verified` rung formalizes this) |
 | `spinel --emit-rbs` | inferred signatures as RBS; `untyped` marks the degraded slow path | whole-program inference already computes them |
 | `spinel --emit-types` + ruby-lsp addon | inferred type on hover; degrade warnings | per-node type cache already serialized to the IR |
+| **`spinel doctor`** (+ `doctor-gate`) | one report: ignored requires, emit-0s, widened slots, inference↔codegen **disagreements**, **codegen** build failures, behavior diff — and a CI gate over it | composes the legs above; the disagree/codegen legs need no new compiler work |
+| **`spinel-reduce`** (+ `spinel-flatten`) | the **minimal trigger** for any doctor finding (ddmin); `flatten` inlines a gem's require graph first | doctor's `--json` *is* the oracle — no bespoke reducer per bug class |
+| **`tools/perf/`** (`spinel-perf`, `spinel-flamegraph`, `speedup-estimate`, `rbs-disagree`) | "would it be faster / why slow": hot lines + GC-vs-user split, Ruby-demangled flamegraphs, a static port estimate, inferencer-disagreement coordinates | the same inference + `#line` substrate, pointed at speed |
 
-All four attack the failure mode `spinelgems`' ARCHITECTURE.md calls the
-dangerous one — the **silent miscompile**: "it compiled" ≠ "it works", no
-warning. A native debugger doesn't help with those (they aren't crashes); making
-the compiler's analysis and the CRuby differential *visible* does.
+The first four — plus doctor's behavior leg — attack the failure mode
+`spinelgems`' ARCHITECTURE.md calls the dangerous one — the **silent miscompile**:
+"it compiled" ≠ "it works", no warning. A native debugger doesn't help with those
+(they aren't crashes); making the compiler's analysis and the CRuby differential
+*visible* does. doctor's `disagree` and `codegen` legs extend that to the
+*static* silent-miscompile fingerprint and to C-build failures that the analysis
+legs alone read as "clean"; `spinel-reduce` shrinks any of them to a minimal
+repro. (Tool detail: each tool's own README; the perf write-up is
+[08-perf-analysis](08-perf-analysis.md).)
 
 ## Proof of value (runs you can reproduce)
 
@@ -142,6 +150,18 @@ spinel app.rb --emit-types       # -> app.types.json (positions + diagnostics)
 tools/value-bisect/bisect.sh app.rb [-- args]      # exit 1 = divergence
 tools/value-bisect/triage.sh --failing             # triage the test suite
 SPINEL_INT_OVERFLOW=wrap tools/value-bisect/bisect.sh app.rb   # pick the mode
+
+# One-shot risk report + CI gate (this repo)
+tools/doctor/doctor.sh [--json] [--no-cruby] app.rb   # require/compile/inference/disagree/codegen/behavior
+ruby tools/doctor/doctor-gate.rb --github             # CI: fail on a new degrade/disagreement/codegen error
+
+# Minimal repro from a degrade (this repo)
+ruby tools/reduce/spinel-flatten.rb smoke.rb -o flat.rb            # inline a gem's require graph
+ruby tools/reduce/spinel-reduce.rb --target sp_box_int flat.rb     # ddmin to the minimal trigger
+
+# Performance (this repo)
+ruby tools/perf/speedup-estimate.rb app.rb            # static "would it be faster?"
+ruby tools/perf/spinel-flamegraph.rb --gmon ./bin gmon.out -o flame.svg   # Ruby-demangled flamegraph
 ```
 
 ## Why propose this upstream

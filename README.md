@@ -23,12 +23,25 @@ Jump to [Getting started](#getting-started) for hands-on usage.
 ### `spinel doctor` — one-shot health check
 [`tools/doctor/`](tools/doctor/) · `doctor.sh [--json] [--no-bisect] <program.rb>`
 
-Compile-probe + inference-degrade scan + behavior check in one command. Tells
-you, for a given program: does it compile, which calls degrade to the silent
-slow path (e.g. *unresolved call → emits 0*), which methods widened to
-`untyped`, and — when the program runs under CRuby — whether its output matches.
-Human-readable or `--json`. `doctor-gate` wraps it for CI: an allowlist of
-known-degraded sites, non-zero exit on a *new* degrade or a miscompile.
+Six escalating checks in one command: an **ignored `require`** (the prime suspect
+for an emit-0 cascade — a wrong path silently unloads a whole module), the
+**compile** probe (calls that emit `0`), the **inference** scan (methods widened
+to `untyped`), an **inference↔codegen disagreement** (inference resolves a method
+but codegen emits-0 — the static silent-miscompile fingerprint), a **codegen**
+build check (`cc -c` the emitted C — catches what analysis misses, like a Class
+boxed as int), and the **behavior** diff vs CRuby. Verdict from `clean` to
+`codegen-error`. Human or `--json`. `doctor-gate` wraps it for CI: an allowlist
+of known degrades, non-zero exit on a *new* degrade, a disagreement, a codegen
+error, or a miscompile.
+
+### `spinel-reduce` / `spinel-flatten` — minimal repro from a degrade
+[`tools/reduce/`](tools/reduce/) · `spinel-reduce.rb [--target SUBSTR] <degrading.rb>`
+
+Delta-debugs a degrading program to its **minimal trigger** (ddmin with `doctor
+--json` as the oracle): keep removing code while the target finding still
+reproduces; what survives is the cause. `spinel-flatten` inlines a gem's
+`require_relative` graph into one file first, so `spinel-flatten smoke.rb | …`
+turns a real gem's failing smoke into a minimal bug report automatically.
 
 ### value-bisect — differential value localization
 [`tools/value-bisect/`](tools/value-bisect/) · `bisect.sh [--json] <program.rb>`

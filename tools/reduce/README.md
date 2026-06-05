@@ -59,13 +59,33 @@ end
 The surviving lines are the minimal reproducer — paste them into a bug report, or
 keep them as a regression fixture.
 
+## `spinel-flatten` — point it at a *gem*, not a flat file
+
+`spinel-reduce` needs one self-contained file. `spinel-flatten` inlines a
+`require_relative` graph into one, so the gem → minimal-repro pipeline is
+automatic ([spinel-dev#10](https://github.com/OriPekelman/spinel-dev/issues/10)
+part 3):
+
+```sh
+ruby spinel-flatten.rb smoke.rb -o flat.rb        # inline the require graph
+SPINEL_DIR=~/sites/spinel ruby spinel-reduce.rb --target sp_box_int flat.rb
+```
+
+It resolves `require_relative` **depth-first, in place** (a file's definitions
+land before its use, preserving Ruby load order), dedupes repeated requires, drops
+unresolvable ones with a marker (exactly as Spinel silently does — and `doctor`'s
+`require` check flags), and leaves non-relative `require` (stdlib) lines untouched.
+
+End to end: a 3-file gem smoke (`require_relative "lib/thing"` …) that boxes a
+`Class` into a typed hash flattens to 33 lines, then reduces to a **13-line repro
+in 26 doctor calls (~7s)** carrying just the `@table[:cls] = String` trigger.
+
 ## Limits (spike)
 
 - **Code reduction, not parameter search.** It isolates *which* code is necessary
   (array-count vs ivar-count vs FFI-call-count), not the numeric threshold of a
   size-triggered degrade (e.g. "fails when the dim crosses ~512"). Shrinking a
   literal `627 → N` is a complementary axis a future pass could add.
-- Single-file today (it does remove `require_relative` lines as ddmin candidates).
 - The oracle cost is one `spinel doctor` per candidate; budget seconds-per-call ×
   tens-to-hundreds of calls. Memoization + the `ruby -c` gate keep it bounded.
 
