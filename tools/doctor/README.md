@@ -55,7 +55,9 @@ spinel doctor: app.rb
 
 `--json` emits one object (`{file, verdict, compile, inference, disagreements,
 codegen, behavior}`) with the nested bisect finding under `behavior` and a
-`{error_class, symbol, message}` object under `codegen` — for CI, agents, or a
+`{error_class, symbol, message, source}` object under `codegen` (`source` = the
+`app.rb:line` the C error maps back to, via matz/spinel#1338's `#line`; null
+without them) — for CI, agents, or a
 pre-commit gate. `verdict` is `clean` | `degrades` | `miscompile-risk` |
 `miscompiles` | `codegen-error` (the last = the emitted C won't build, which
 trumps the rest since there's no binary to run). `doctor-gate` treats a
