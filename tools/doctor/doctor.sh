@@ -152,6 +152,8 @@ if msg:
         cls, s = 'incompatible-type', sym(r"'([^']+)'")
     elif re.search(r'too (many|few) arguments', q):
         cls, s = 'arg-count-mismatch', sym(r"'([^']+)'")
+    elif 'invalid operands' in q:
+        cls, s = 'invalid-operands', sym(r"have '([^']+)'")   # e.g. `Set << int`
     else:
         cls, s = 'other', sym(r"'([^']+)'")
     print(f"{cls}\t{s}\t{msg}\t{src}")
