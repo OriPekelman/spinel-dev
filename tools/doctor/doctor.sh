@@ -118,16 +118,25 @@ N_DISAGREE=$(nlines "$(cat "$WORK/disagree.txt" 2>/dev/null)")
 # local) reads "clean" — and those C-codegen errors are the bulk of what the
 # spinelgems harness files. Compile-only (`cc -c`, no link → skips FFI-object
 # noise) the already-emitted `x.c` and classify the first diagnostic.
-CODEGEN_CLASS=""; CODEGEN_SYM=""; CODEGEN_MSG=""; N_CODEGEN=0
+CODEGEN_CLASS=""; CODEGEN_SYM=""; CODEGEN_MSG=""; CODEGEN_SRC=""; N_CODEGEN=0
 if [ -s "$WORK/x.c" ]; then
   CFLAGS_X=$(grep -oE 'SPINEL_CFLAGS: .*\*/' "$WORK/x.c" 2>/dev/null | sed 's/.*SPINEL_CFLAGS: //; s/ \*\/.*//' | head -1)
   if ! ${CC:-cc} -c "$WORK/x.c" -o /dev/null -w -I"$SPINEL_DIR/lib" -I"$SPINEL_DIR/lib/regexp" $CFLAGS_X >"$WORK/cc_build.out" 2>&1; then
     CG=$(python3 - "$WORK/cc_build.out" <<'PY'
 import sys, re
-txt = open(sys.argv[1], errors="replace").read()
-m = re.search(r'error:\s*(.+)', txt)
-if m:
-    msg = m.group(1).strip()
+msg = ""; src = ""
+for line in open(sys.argv[1], errors="replace"):
+    # gcc's standard `path:line[:col]: error: msg`. With matz/spinel#1338
+    # (ea60d5f, #line on by default) `path` is the *Ruby* source — capture it.
+    m = re.match(r'\s*([^:\s]+):(\d+)(?::\d+)?:\s*(?:fatal\s+)?error:\s*(.+)', line)
+    if m:
+        if m.group(1).endswith('.rb'):
+            src = f"{m.group(1)}:{m.group(2)}"
+        msg = m.group(3).strip(); break
+    m2 = re.search(r'error:\s*(.+)', line)
+    if m2:
+        msg = m2.group(1).strip(); break
+if msg:
     q = msg.replace('‘', "'").replace('’', "'").replace('`', "'")
     def sym(p):
         mm = re.search(p, q); return mm.group(1) if mm else ''
@@ -145,12 +154,13 @@ if m:
         cls, s = 'arg-count-mismatch', sym(r"'([^']+)'")
     else:
         cls, s = 'other', sym(r"'([^']+)'")
-    print(f"{cls}\t{s}\t{msg}")
+    print(f"{cls}\t{s}\t{msg}\t{src}")
 PY
 )
     CODEGEN_CLASS=$(printf '%s' "$CG" | cut -f1)
     CODEGEN_SYM=$(printf '%s' "$CG" | cut -f2)
     CODEGEN_MSG=$(printf '%s' "$CG" | cut -f3)
+    CODEGEN_SRC=$(printf '%s' "$CG" | cut -f4)
     [ -n "$CODEGEN_CLASS" ] && N_CODEGEN=1
   fi
 fi
@@ -185,9 +195,9 @@ if [ "$BEHAVIOR" = "diverge" ] || [ "$BEHAVIOR" = "crash" ] || [ "$BEHAVIOR" = "
 if [ "$N_CODEGEN" -gt 0 ]; then OVERALL="codegen-error"; fi
 
 if [ "$JSON" -eq 1 ]; then
-  python3 - "$SRC" "$OVERALL" "$N_UNRESOLVED" "$N_DEGRADED" "$N_UNTYPED" "$BEHAVIOR" "$WORK/cc.out" "$WORK/x.rbs" "$BEHAVIOR_JSON" "$WORK/disagree.txt" "$CODEGEN_CLASS" "$CODEGEN_SYM" "$CODEGEN_MSG" <<'PY'
+  python3 - "$SRC" "$OVERALL" "$N_UNRESOLVED" "$N_DEGRADED" "$N_UNTYPED" "$BEHAVIOR" "$WORK/cc.out" "$WORK/x.rbs" "$BEHAVIOR_JSON" "$WORK/disagree.txt" "$CODEGEN_CLASS" "$CODEGEN_SYM" "$CODEGEN_MSG" "$CODEGEN_SRC" <<'PY'
 import sys, json, re
-src, overall, nu, nd, nt, behavior, ccpath, rbspath, bjson, dispath, cg_cls, cg_sym, cg_msg = sys.argv[1:14]
+src, overall, nu, nd, nt, behavior, ccpath, rbspath, bjson, dispath, cg_cls, cg_sym, cg_msg, cg_src = sys.argv[1:15]
 cc = open(ccpath, errors="replace").read().splitlines()
 unresolved = [l.strip() for l in cc if "cannot resolve call" in l]
 ignored_requires = [re.sub(r"^\s*warning:\s*", "", l).strip()
@@ -197,7 +207,7 @@ try:
     disagreements = [l.strip() for l in open(dispath, errors="replace") if l.strip()]
 except OSError:
     disagreements = []
-codegen = {"error_class": cg_cls, "symbol": cg_sym, "message": cg_msg} if cg_cls else None
+codegen = {"error_class": cg_cls, "symbol": cg_sym, "message": cg_msg, "source": (cg_src or None)} if cg_cls else None
 out = {"file": src, "verdict": overall,
        "compile": {"unresolved_calls": unresolved, "ignored_requires": ignored_requires},
        "inference": {"degraded_methods": degraded, "untyped_count": int(nt or 0)},
@@ -237,7 +247,11 @@ if [ "$N_DISAGREE" -gt 0 ]; then
   cat "$WORK/disagree.txt" | sed 's/^/               - /'
 fi
 if [ "$N_CODEGEN" -gt 0 ]; then
-  printf '  codegen    ✗ C build FAILS [%s] on %s — the emitted C does not compile:\n' "$CODEGEN_CLASS" "${CODEGEN_SYM:-?}"
+  if [ -n "$CODEGEN_SRC" ]; then
+    printf '  codegen    ✗ C build FAILS at %s [%s] on %s:\n' "$CODEGEN_SRC" "$CODEGEN_CLASS" "${CODEGEN_SYM:-?}"
+  else
+    printf '  codegen    ✗ C build FAILS [%s] on %s — the emitted C does not compile:\n' "$CODEGEN_CLASS" "${CODEGEN_SYM:-?}"
+  fi
   printf '               %s\n' "$CODEGEN_MSG"
 else
   printf '  codegen    ✓ emitted C compiles\n'
