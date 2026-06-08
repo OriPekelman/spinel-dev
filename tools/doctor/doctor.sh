@@ -57,6 +57,13 @@ nlines() { if [ -z "$1" ]; then echo 0; else printf '%s\n' "$1" | grep -c .; fi;
 UNRESOLVED=$(grep -E "cannot resolve call" "$WORK/cc.out" 2>/dev/null | sed 's/^[[:space:]]*//')
 N_UNRESOLVED=$(nlines "$UNRESOLVED")
 
+# 1a. Parse leg. spinel_parse couldn't build the AST — a syntax spinel's Prism
+# subset rejects (real gems hit this: e.g. colorize). Nothing downstream is
+# meaningful, and the other legs would misleadingly read "✓ clean", so this is
+# surfaced first and loudest. (Found running doctor on a real gem.)
+PARSE_ERR=$(grep -iE "^Parse error|unexpected .*(expecting|ignoring)" "$WORK/cc.out" 2>/dev/null | sed 's/^[[:space:]]*//')
+N_PARSE=$(nlines "$PARSE_ERR")
+
 # 1b. Ignored requires (spinel-dev#9 re-scope). A require Spinel can't resolve — a
 # wrong relative path, or a stdlib it doesn't ship — is silently dropped. If it
 # defines a module the program then calls, EVERY call to that module resolves
@@ -172,7 +179,7 @@ fi
 # Skipped when the codegen leg already failed — there's no valid binary to run.
 BEHAVIOR="skipped"
 BEHAVIOR_JSON='null'
-if [ "$DO_BISECT" -eq 1 ] && [ "$N_CODEGEN" -eq 0 ] && [ -x "$BISECT" ]; then
+if [ "$DO_BISECT" -eq 1 ] && [ "$N_CODEGEN" -eq 0 ] && [ "$N_PARSE" -eq 0 ] && [ -x "$BISECT" ]; then
   BJSON=$(SPINEL_DIR="$SPINEL_DIR" "$BISECT" --json $NOCRUBY_FLAG "$SRC" -- "$@" 2>/dev/null)
   V=$(printf '%s' "$BJSON" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("verdict","?"))' 2>/dev/null)
   if [ -n "$V" ]; then BEHAVIOR="$V"; BEHAVIOR_JSON="$BJSON"; else BEHAVIOR="unavailable"; fi
@@ -195,6 +202,9 @@ if [ "$BEHAVIOR" = "diverge" ] || [ "$BEHAVIOR" = "crash" ] || [ "$BEHAVIOR" = "
 # A codegen error means the program doesn't even build — definitive, and it
 # trumps the rest (there's no binary to have behavior). Set last.
 if [ "$N_CODEGEN" -gt 0 ]; then OVERALL="codegen-error"; fi
+# A parse error is the earliest, most fundamental failure — spinel couldn't even
+# build the AST, so every other leg's reading is moot. Trumps all. Set last.
+if [ "$N_PARSE" -gt 0 ]; then OVERALL="parse-error"; fi
 
 if [ "$JSON" -eq 1 ]; then
   python3 - "$SRC" "$OVERALL" "$N_UNRESOLVED" "$N_DEGRADED" "$N_UNTYPED" "$BEHAVIOR" "$WORK/cc.out" "$WORK/x.rbs" "$BEHAVIOR_JSON" "$WORK/disagree.txt" "$CODEGEN_CLASS" "$CODEGEN_SYM" "$CODEGEN_MSG" "$CODEGEN_SRC" <<'PY'
@@ -202,15 +212,21 @@ import sys, json, re
 src, overall, nu, nd, nt, behavior, ccpath, rbspath, bjson, dispath, cg_cls, cg_sym, cg_msg, cg_src = sys.argv[1:15]
 cc = open(ccpath, errors="replace").read().splitlines()
 unresolved = [l.strip() for l in cc if "cannot resolve call" in l]
+parse_errors = [l.strip() for l in cc
+                if re.match(r"^Parse error", l) or re.search(r"unexpected .*(expecting|ignoring)", l)]
 ignored_requires = [re.sub(r"^\s*warning:\s*", "", l).strip()
                     for l in cc if re.search(r"(call|require) is ignored", l, re.I)]
-degraded = [re.sub(r" # spinel:.*", "", l).strip() for l in open(rbspath, errors="replace") if "# spinel: widened" in l]
+try:
+    degraded = [re.sub(r" # spinel:.*", "", l).strip() for l in open(rbspath, errors="replace") if "# spinel: widened" in l]
+except OSError:  # emit-rbs produces no file on a parse-error input
+    degraded = []
 try:
     disagreements = [l.strip() for l in open(dispath, errors="replace") if l.strip()]
 except OSError:
     disagreements = []
 codegen = {"error_class": cg_cls, "symbol": cg_sym, "message": cg_msg, "source": (cg_src or None)} if cg_cls else None
 out = {"file": src, "verdict": overall,
+       "parse_errors": parse_errors,
        "compile": {"unresolved_calls": unresolved, "ignored_requires": ignored_requires},
        "inference": {"degraded_methods": degraded, "untyped_count": int(nt or 0)},
        "disagreements": disagreements,
@@ -223,6 +239,11 @@ fi
 
 # Human report.
 printf 'spinel doctor: %s\n' "$SRC"
+if [ "$N_PARSE" -gt 0 ]; then
+  printf '  parse      ✗ spinel could not parse this file (%s error(s)) — its Prism subset\n' "$N_PARSE"
+  printf '             rejects some syntax here; every check below is moot until this is fixed:\n'
+  printf '%s\n' "$PARSE_ERR" | head -6 | sed 's/^/               - /'
+fi
 if [ "$N_IGNORED_REQ" -gt 0 ]; then
   printf '  require    ✗ %s ignored require(s) — PRIME SUSPECT for emit-0 cascades:\n' "$N_IGNORED_REQ"
   printf '%s\n' "$IGNORED_REQ" | sed 's/^/               - /'

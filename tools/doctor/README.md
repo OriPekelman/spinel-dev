@@ -7,10 +7,11 @@ Spinel — the cheap-to-expensive battery in one report.
 ./doctor.sh [--json] [--no-bisect] path/to/program.rb [-- program-args...]
 ```
 
-It runs six checks, escalating in cost and in what they catch:
+It runs seven checks, escalating in cost and in what they catch:
 
 | Check | How | Catches |
 |---|---|---|
+| **parse** | `spinel -c`, scrape `Parse error` / `unexpected …` | spinel's Prism subset **couldn't parse the file** — every check below is moot until fixed. Real gems hit this (e.g. `colorize`); without it they'd misleadingly read `compile ✓` |
 | **require** | `spinel -c`, scrape `… the (call\|require) is ignored` | an **ignored `require`** — a wrong relative path or an unshipped stdlib that Spinel silently drops. If it defines a module the program calls, *every* call to that module then emits 0. The prime suspect for an emit-0 cascade ([spinel-dev#9](https://github.com/OriPekelman/spinel-dev/issues/9)) |
 | **compile** | `spinel -c`, scrape `cannot resolve call … (emitting 0)` | a call Spinel can't lower — it silently emits `0`/`nil` |
 | **inference** | `spinel --emit-rbs`, find `# spinel: widened` | a method whose param/return fell to the boxed `untyped` slow path |
@@ -58,9 +59,10 @@ codegen, behavior}`) with the nested bisect finding under `behavior` and a
 `{error_class, symbol, message, source}` object under `codegen` (`source` = the
 `app.rb:line` the C error maps back to, via matz/spinel#1338's `#line`; null
 without them) — for CI, agents, or a
-pre-commit gate. `verdict` is `clean` | `degrades` | `miscompile-risk` |
-`miscompiles` | `codegen-error` (the last = the emitted C won't build, which
-trumps the rest since there's no binary to run). `doctor-gate` treats a
+pre-commit gate (also a top-level `parse_errors` list). `verdict` is `clean` |
+`degrades` | `miscompile-risk` | `miscompiles` | `codegen-error` | `parse-error`
+(the last two = the program won't build / won't parse, so they trump the rest —
+no binary to run; `parse-error` is the most fundamental). `doctor-gate` treats a
 disagreement as allowlistable-but-distinct (a *new* one fails CI loudly) and a
 codegen error as a hard, never-allowlistable failure (a non-building program is
 never acceptable).
