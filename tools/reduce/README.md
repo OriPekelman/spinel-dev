@@ -80,12 +80,30 @@ End to end: a 3-file gem smoke (`require_relative "lib/thing"` …) that boxes a
 `Class` into a typed hash flattens to 33 lines, then reduces to a **13-line repro
 in 26 doctor calls (~7s)** carrying just the `@table[:cls] = String` trigger.
 
+## Parameter search (`--shrink-ints`)
+
+Code reduction isolates *which code* is the trigger; `--shrink-ints` isolates the
+*numeric threshold* of a **size-triggered** degrade (e.g. "fails when the dim
+crosses ~512"). After the code passes, it binary-searches each surviving integer
+literal down to the smallest value that still reproduces the target, and reports
+the boundary:
+
+```
+size thresholds (parameter search):
+  engine.rb:14: 627 → 513  (threshold — 512 does not trigger)
+  engine.rb:8:  64  → 0    (not size-dependent)
+```
+
+A literal whose value is irrelevant (even `0` still triggers) is zeroed and
+flagged "not size-dependent." Assumes the trigger is monotone in the value (what a
+size threshold is). The binary search is validated (it converges, e.g. 627 → 100
+against a fixed boundary in ~10 probes); note that genuine spinel size-thresholds
+are uncommon, so on most degrades code reduction removes the irrelevant literals
+first and this pass reports nothing — which is the correct answer for a
+*structurally* (not size-) triggered bug.
+
 ## Limits (spike)
 
-- **Code reduction, not parameter search.** It isolates *which* code is necessary
-  (array-count vs ivar-count vs FFI-call-count), not the numeric threshold of a
-  size-triggered degrade (e.g. "fails when the dim crosses ~512"). Shrinking a
-  literal `627 → N` is a complementary axis a future pass could add.
 - The oracle cost is one `spinel doctor` per candidate; budget seconds-per-call ×
   tens-to-hundreds of calls. Memoization + the `ruby -c` gate keep it bounded.
 

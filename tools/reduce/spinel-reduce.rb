@@ -43,6 +43,7 @@ until argv.empty?
   when "--target"      then opts[:target] = argv.shift
   when "--no-cruby"    then opts[:no_cruby] = true
   when "--keep-bisect" then opts[:keep_bisect] = true
+  when "--shrink-ints" then opts[:shrink_ints] = true
   when "-o"            then opts[:out] = argv.shift
   when /\A--/          then abort "spinel-reduce: unknown flag #{a}"
   else opts[:src] = a
@@ -162,6 +163,48 @@ def ddmin(lines, target, opts)
   lines
 end
 
+# Parameter-search axis (--shrink-ints): code reduction isolates *which* code is
+# the trigger; this isolates the *numeric threshold* of a size-triggered degrade
+# ("fails when the dim crosses ~512"). For each integer literal, binary-search the
+# smallest value that still reproduces the target — the boundary the user couldn't
+# pin by hand. A literal whose value doesn't matter (even 0 still triggers) is
+# reported as "not size-dependent" and zeroed. (Assumes the trigger is monotone in
+# the value, which is what a size threshold is.)
+INT_LIT = /(?<![\w.])\d[\d_]*(?![\w.])/
+
+def shrink_ints(lines, target, opts, src)
+  thresholds = []
+  li = 0
+  while li < lines.size
+    matches = lines[li].enum_for(:scan, INT_LIT).map { Regexp.last_match }
+    matches.reverse_each do |m|
+      orig_v = m[0].delete("_").to_i
+      next if orig_v == 0
+      b, e = m.begin(0), m.end(0)
+      test_v = lambda do |v|
+        cand = lines.dup
+        cand[li] = lines[li][0...b] + v.to_s + lines[li][e..]
+        triggers?(cand, target, opts)
+      end
+      label = "#{File.basename(src)}:#{li + 1}"
+      if test_v.call(0)                       # value is irrelevant to the target
+        lines[li] = lines[li][0...b] + "0" + lines[li][e..]
+        thresholds << "#{label}: #{orig_v} → 0  (not size-dependent)"
+        next
+      end
+      lo, hi = 1, orig_v                       # orig_v triggers; find the smallest that does
+      while lo < hi
+        mid = (lo + hi) / 2
+        if test_v.call(mid) then hi = mid else lo = mid + 1 end
+      end
+      lines[li] = lines[li][0...b] + hi.to_s + lines[li][e..]
+      thresholds << "#{label}: #{orig_v} → #{hi}  (threshold — #{hi - 1} does not trigger)"
+    end
+    li += 1
+  end
+  [lines, thresholds]
+end
+
 # ---- pick the target ----
 orig = File.readlines(src) # keep line endings
 base = doctor_findings(src, opts)
@@ -200,6 +243,12 @@ min = block_reduce(orig, target, opts)
 min = ddmin(min, target, opts)
 min = block_reduce(min, target, opts)
 
+int_thresholds = []
+if opts[:shrink_ints]
+  $stderr.puts "  shrinking integer literals (parameter search)…"
+  min, int_thresholds = shrink_ints(min, target, opts, src)
+end
+
 # ---- output ----
 text = min.join
 text += "\n" unless text.end_with?("\n")
@@ -209,5 +258,9 @@ if opts[:out]
 else
   $stderr.puts "\n  minimized (#{orig.size} → #{min.size} lines, #{$calls} doctor calls):\n\n"
   puts text
+end
+unless int_thresholds.empty?
+  $stderr.puts "  size thresholds (parameter search):"
+  int_thresholds.each { |t| $stderr.puts "    #{t}" }
 end
 $stderr.puts "  the surviving lines are the minimal trigger for: #{target.inspect}"
