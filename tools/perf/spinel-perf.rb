@@ -39,8 +39,23 @@ RUNTIME_PFX = /\A(int_|str_|float_|sym_|gc_|bigint|sprintf|raise|exc_|range|utf8
 # pause, which is exactly these frames.
 GC_FRAME = /\Asp_gc_\w|_gc_scan\b/
 
+# Exact emitted-symbol -> Ruby-name map (`--emit-symbol-map`, matz/spinel#1345).
+# sanitize_name is irreversible (save? -> save_p, <=> -> _cmp, [] -> _aref), so
+# the heuristic demangler below can only approximate; when the compiler emits
+# the map we trust it, and fall back per-miss (gc_scan scanners and runtime
+# frames aren't methods, so they never appear in the map).
+SYM_MAP = {}
+def load_symbol_map(path)
+  require "json"
+  rows = JSON.parse(File.read(path))["symbols"] || []
+  rows.each { |s| SYM_MAP[s["c"]] = s["ruby"] unless s["c"].to_s.empty? }
+rescue StandardError
+  SYM_MAP.clear # older spinel: no/strange map -> heuristic only
+end
+
 def demangle(sym) # sp_<Class>_<method> -> Class#method / Class.method / bare
   return nil unless sym&.start_with?("sp_")
+  if (exact = SYM_MAP[sym]) then return exact end
   return :gc if sym =~ GC_FRAME
   name = sym[3..]
   return :runtime if name =~ RUNTIME_PFX
@@ -61,10 +76,14 @@ src_lines = (File.readlines(src, chomp: true) rescue [])
 
 Dir.mktmpdir("spinel_perf") do |w|
   cfile = File.join(w, "out.c")
+  symjson = File.join(w, "out.symbols.json")
   # `-g -c`: emit C *with* #line directives so gprof -l maps samples to the .rb.
-  unless system(SPINEL, "-g", src, "-c", "-o", cfile, out: File::NULL, err: File::NULL) && File.size?(cfile)
+  # SPINEL_EMIT_SYMBOL_MAP rides along on the same codegen run (no extra
+  # compile); a pre-#1345 spinel simply ignores it.
+  unless system({ "SPINEL_EMIT_SYMBOL_MAP" => symjson }, SPINEL, "-g", src, "-c", "-o", cfile, out: File::NULL, err: File::NULL) && File.size?(cfile)
     abort "spinel-perf: codegen failed (does it compile? try `spinel doctor`)"
   end
+  load_symbol_map(symjson) if File.size?(symjson)
   c = File.read(cfile)
   links  = c.scan(%r{^/\* SPINEL_LINK: (.*) \*/$}).flatten.join(" ")
   cflags = c.scan(%r{^/\* SPINEL_CFLAGS: (.*) \*/$}).flatten.join(" ")

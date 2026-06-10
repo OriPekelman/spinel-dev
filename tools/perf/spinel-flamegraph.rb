@@ -37,8 +37,22 @@ RUNTIME_PFX = /\A(int_|str_|float_|sym_|bigint|sprintf|raise|exc_|range|utf8|oom
   json|String|Array|fiber|main\b)/x
 GC_FRAME = /\Asp_gc_\w|_gc_scan\b|\Asp_gc_alloc\b/
 
+# Exact emitted-symbol -> Ruby-name map (`--emit-symbol-map`, matz/spinel#1345);
+# strictly more accurate than the heuristic below (sanitize_name is irreversible:
+# save? -> save_p, <=> -> _cmp, [] -> _aref). Heuristic stays as the per-miss
+# fallback (gc_scan scanners / runtime frames aren't methods, never in the map).
+SYM_MAP = {}
+def load_symbol_map(path)
+  require "json"
+  rows = JSON.parse(File.read(path))["symbols"] || []
+  rows.each { |s| SYM_MAP[s["c"]] = s["ruby"] unless s["c"].to_s.empty? }
+rescue StandardError
+  SYM_MAP.clear # older spinel: no/strange map -> heuristic only
+end
+
 def classify(sym) # -> [:gc|:runtime|:user, ruby_label]
   return [:runtime, sym] unless sym&.start_with?("sp_")
+  if (exact = SYM_MAP[sym]) then return [:user, exact] end
   return [:gc, sym[3..]] if sym =~ GC_FRAME
   name = sym[3..]
   return [:runtime, name] if name =~ RUNTIME_PFX
@@ -125,7 +139,10 @@ else
   self_pct = nil
   Dir.mktmpdir("spinel_flame") do |w|
     cfile = File.join(w, "o.c")
-    system(SPINEL, "-g", src, "-c", "-o", cfile, out: File::NULL, err: File::NULL) or abort "codegen failed"
+    symjson = File.join(w, "o.symbols.json")
+    # Symbol map rides along on the same codegen run; pre-#1345 spinel ignores it.
+    system({ "SPINEL_EMIT_SYMBOL_MAP" => symjson }, SPINEL, "-g", src, "-c", "-o", cfile, out: File::NULL, err: File::NULL) or abort "codegen failed"
+    load_symbol_map(symjson) if File.size?(symjson)
     c = File.read(cfile)
     links = c.scan(%r{^/\* SPINEL_LINK: (.*) \*/$}).flatten.join(" ")
     cflags = c.scan(%r{^/\* SPINEL_CFLAGS: (.*) \*/$}).flatten.join(" ")
