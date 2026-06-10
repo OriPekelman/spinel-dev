@@ -294,6 +294,14 @@ def value_trace(debugger, command, result, internal_dict):
                 process.Continue()
                 continue
             fbase, line = cmap[gl]
+            # Honor SP_TRACE_SRCS in cmap mode too: the cmap covers every
+            # compiled file, but the caller may have restricted the trace set
+            # (twin-oracle mode excludes the primitive-layer files that differ
+            # between the paired trees, spinel-dev#6). Recording outside the
+            # set would only produce one-sided keys the comparator can't use.
+            if src_bases and fbase not in src_bases:
+                process.Continue()
+                continue
         else:
             line, fbase = gl, glfile
             # Legacy #line mode: reject stops past EOF (epilogue auto-increment).

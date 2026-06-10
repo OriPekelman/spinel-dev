@@ -36,15 +36,24 @@ JSON=0
 NOCRUBY=0          # single-sided: skip the CRuby oracle (for FFI/AOT-only apps
                    # that can't run under CRuby — tep, toy). No divergence verdict;
                    # still gives crash localization + the Spinel-side value trace.
+ORACLE_SRC=""      # gem-backed twin program to run under CRuby instead of SRC
+                   # (spinel-dev#6: differential leg for FFI apps with a paired
+                   # CRuby-loadable variant, e.g. roundhouse's ruby target).
+                   # Tracing is restricted to files BYTE-IDENTICAL across the
+                   # two trees, so the primitive layer (the FFI/gem shims that
+                   # differ by construction) is excluded on both sides and the
+                   # change-histories align on the shared application/framework
+                   # Ruby.
 while :; do
   case "$1" in
-    --json)     JSON=1; shift ;;       # machine-readable verdict
-    --no-cruby) NOCRUBY=1; shift ;;    # explicit single-sided mode
+    --json)       JSON=1; shift ;;       # machine-readable verdict
+    --no-cruby)   NOCRUBY=1; shift ;;    # explicit single-sided mode
+    --oracle-src) ORACLE_SRC="$2"; shift 2 ;;
     *) break ;;
   esac
 done
 if [ -z "$1" ]; then
-  echo "usage: bisect.sh [--json] [--no-cruby] <program.rb> [-- program-args...]" >&2
+  echo "usage: bisect.sh [--json] [--no-cruby] [--oracle-src <twin.rb>] <program.rb> [-- program-args...]" >&2
   exit 2
 fi
 SRC="$1"; shift
@@ -68,7 +77,12 @@ case "$INT_OVERFLOW" in
 esac
 
 WORK="$(mktemp -d /tmp/spinel_bisect.XXXXXX)"
-trap 'rm -rf "$WORK"' EXIT
+# BISECT_KEEP=1 preserves the work dir (traces, cmap, out.c) for debugging.
+if [ "${BISECT_KEEP:-0}" = "1" ]; then
+  echo "bisect: keeping work dir $WORK" >&2
+else
+  trap 'rm -rf "$WORK"' EXIT
+fi
 
 echo "bisect: program=$SRC  overflow=$INT_OVERFLOW  spinel=$SPINEL_DIR" >&2
 
@@ -83,6 +97,46 @@ SRCS="$(awk '/^FILE /{print $3}' "$WORK/ast" | sed 's/%20/ /g; s/%25/%/g' | past
 [ -z "$SRCS" ] && SRCS="$SRC"
 echo "bisect: tracing files: $(printf '%s' "$SRCS" | tr ':' ' ')" >&2
 
+# --- Twin-oracle mode: restrict tracing to byte-identical shared files ------
+# For each compiled file, resolve its twin at the same path relative to the
+# oracle program's root; keep the pair only when the contents are identical.
+# Files that differ (the primitive layer: FFI vs gem shims, the entrypoints)
+# are skipped on BOTH sides — they are the mode's blind spot by construction
+# (spinel-dev#6) — and listed so the report is honest about coverage.
+ORACLE_SRCS=""
+if [ -n "$ORACLE_SRC" ]; then
+  if [ ! -f "$ORACLE_SRC" ]; then
+    echo "bisect: --oracle-src $ORACLE_SRC: no such file" >&2
+    exit 2
+  fi
+  SRC_ROOT="$(cd "$(dirname "$SRC")" && pwd)"
+  ORC_ROOT="$(cd "$(dirname "$ORACLE_SRC")" && pwd)"
+  SHARED_SP=""; SHARED_OR=""; SKIPPED=""
+  OLDIFS="$IFS"; IFS=:
+  for f in $SRCS; do
+    IFS="$OLDIFS"
+    af="$f"
+    case "$af" in /*) ;; *) af="$(pwd)/$af" ;; esac
+    rel="${af#"$SRC_ROOT"/}"
+    twin="$ORC_ROOT/$rel"
+    if [ -f "$twin" ] && cmp -s "$af" "$twin"; then
+      SHARED_SP="${SHARED_SP:+$SHARED_SP:}$f"
+      SHARED_OR="${SHARED_OR:+$SHARED_OR:}$twin"
+    else
+      SKIPPED="${SKIPPED:+$SKIPPED }$rel"
+    fi
+    IFS=:
+  done
+  IFS="$OLDIFS"
+  if [ -z "$SHARED_SP" ]; then
+    echo "bisect: --oracle-src: no byte-identical shared files between the two trees" >&2
+    exit 2
+  fi
+  SRCS="$SHARED_SP"
+  ORACLE_SRCS="$SHARED_OR"
+  echo "bisect: twin-oracle mode — tracing $(printf '%s' "$SRCS" | awk -F: '{print NF}') shared files; skipped (differ/absent): ${SKIPPED:-none}" >&2
+fi
+
 # --- CRuby oracle -----------------------------------------------------------
 # Single-sided when --no-cruby, or auto when the program can't run under CRuby
 # (FFI / AOT-only frameworks: a plain `ruby <file>` raises at require). Without an
@@ -92,7 +146,9 @@ if [ "$NOCRUBY" -eq 0 ]; then
   echo "bisect: tracing under CRuby..." >&2
   # The traced program's own stdout (its puts output) is irrelevant — we compare
   # values, not output — and would pollute --json. Drop it; the trace goes to a file.
-  ruby "$HERE/cruby_trace.rb" "$SRC" "$WORK/cruby.json" "$SRCS" "$@" >/dev/null
+  # Twin-oracle mode runs the gem-backed twin with the twin-side shared list;
+  # histories still key by <basename>::<var>, so they align with the Spinel side.
+  ruby "$HERE/cruby_trace.rb" "${ORACLE_SRC:-$SRC}" "$WORK/cruby.json" "${ORACLE_SRCS:-$SRCS}" "$@" >/dev/null
   # Auto-fallback: cruby_trace records the program's own exit in the JSON; 70 is
   # its sentinel for "raised an exception". An immediate raise (e.g. `ffi_lib`
   # undefined, or an AOT-only `require` guard) means there's no usable oracle —
