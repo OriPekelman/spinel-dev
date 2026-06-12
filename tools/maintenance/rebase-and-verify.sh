@@ -30,8 +30,8 @@ PUSH_REMOTE="${PUSH_REMOTE:-fork}"               # = OriPekelman/spinel via SSH.
 # scope is refused ("refusing to allow an OAuth App to ... workflow"). SSH has no
 # such restriction.
 WORKTREE="${WORKTREE:-/srv/data/scratch/spinel-rebase}"
-# Default to the repo this script lives in (checkout path varies per machine:
-# ~/sites/spinel-tools on gx10, historically ~/sites/spinel-dev).
+# Default to the repo this script lives in (checkout path may vary per machine;
+# canonically ~/sites/spinel-dev, briefly ~/sites/spinel-tools on gx10).
 SPINEL_DEV="${SPINEL_DEV:-$(cd "$(dirname "$0")/../.." && pwd)}"
 DO_PUSH=0
 [ "${1:-}" = "--push" ] && DO_PUSH=1
