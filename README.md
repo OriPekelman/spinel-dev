@@ -169,6 +169,7 @@ The tools rely on a few opt-in, output-neutral compiler hooks. These landed in
 | [06-validation-results](docs/06-validation-results.md) | Evidence the tools are valuable: `--emit-rbs` vs tep's authored RBS (~73% agreement), `doctor` on toy (real emit-0 + degrades), and the limitations both expose. |
 | [07-packaging](docs/07-packaging.md) | How the tools ship: compiler features upstream, harness as three small gems (`ruby-lsp-spinel`, `spinel-bisect`, `spinel-doctor`). Proposal; unpublished pending upstream merge. |
 | [08-perf-analysis](docs/08-perf-analysis.md) | Proposal: "would Spinel make you faster?" (static degrade-scan estimate) + "why slow?" (a profiler over the `#line` map). Reuses the inference + source-map substrate. |
+| [09-tracking-upstream-migrations](docs/09-tracking-upstream-migrations.md) | Proposal: tools to help downstream projects (toy/tep) move with a fast-moving `matz/master` across large changes — a parity probe, a capability manifest, a gate-bisector. Grounded in absorbing the Ruby→C rewrite. |
 
 ## Sibling projects
 
