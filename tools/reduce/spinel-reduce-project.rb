@@ -232,6 +232,29 @@ live.each do |f|
   end
 end
 
+# ---- pass 3: line-level cleanup within survivors ----
+# Block removal can't touch module-level statements or non-def/class blocks
+# (constants, `if`/anchor blocks). A greedy single-line sweep (ruby -c gated)
+# removes those too, driving toward a true minimal surface.
+live.each do |f|
+  changed = true
+  while changed
+    changed = false
+    lines = content[f].lines
+    i = 0
+    while i < lines.size
+      cand = lines[0...i] + (lines[(i + 1)..] || [])
+      if !cand.empty? && (system("ruby", "-c", "-e", cand.join, out: File::NULL, err: File::NULL) rescue false) && reproduces?(content.merge(f => cand.join), target)
+        content = content.merge(f => cand.join)
+        lines = cand
+        changed = true
+      else
+        i += 1
+      end
+    end
+  end
+end
+
 # ---- report ----
 restore.call
 live = FILES.select { |f| content[f] !~ /\A# spinel-reduce-project: emptied/ }
