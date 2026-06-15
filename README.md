@@ -82,6 +82,23 @@ not boxing-bound**, a decomposition the flamegraph makes legible at a glance.
 Write-up: [docs/08](docs/08-perf-analysis.md), discussion on
 [spinel-dev#5](https://github.com/OriPekelman/spinel-dev/issues/5)/[#7](https://github.com/OriPekelman/spinel-dev/issues/7).
 
+### spinel-migrate / spinel-probe — track a moving compiler
+[`tools/migrate/`](tools/migrate/) · `spinel-migrate.rb --to <dir> [--from <dir>] [--rbs DIR] <target.rb>...`
+[`tools/probe/`](tools/probe/) · `spinel-probe.rb [--json]`
+
+When `matz/master` makes a large change (the June 2026 **Ruby→C rewrite** is the
+motivating case), these answer *can my project move, and if not, what's blocking?*
+`spinel-migrate` compiles a project's build targets with a candidate compiler
+(`--to`) and, optionally, the current pin (`--from`), then prints a go/no-go diff:
+each target's status (`ok` / `REGRESSED` / `still-broken`) with the first blocker
+attributed to a **Ruby** source site — the manual "build each target on both, diff
+the outcomes" probe, codified. `spinel-probe` underpins it (and retires the
+version-guard debt the other tools accreted): a one-shot manifest of a checkout's
+**driver** (C binary vs legacy shell), **layout** (`legacy/`-split vs root),
+supported `--emit-*` flags, **error model** (strict hard-error vs silent emit-0),
+and **symbol-map mode** (emit-only vs ride-along) — so tools and downstream
+Makefiles adapt to a layout/flag shift at one tested point. Design: [docs/09](docs/09-tracking-upstream-migrations.md).
+
 ## Getting started
 
 You need a built `spinel` (the AOT compiler). Point the standalone tools at it

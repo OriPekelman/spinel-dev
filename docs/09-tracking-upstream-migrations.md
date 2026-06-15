@@ -1,10 +1,12 @@
 # Helping downstream projects move with spinel master
 
-> **Status: proposal / RFC.** Motivated by absorbing the matz/spinel **Ruby→C
+> **Status: partly implemented.** Motivated by absorbing the matz/spinel **Ruby→C
 > compiler rewrite** (the `f6d5eef..b60fbd7` wave, 763 commits, June 2026). This
 > doc generalizes that experience into reusable tooling so toy / tep / spinelgems
 > can track a fast-moving `matz/master` without each one re-deriving the same
-> migration archaeology by hand.
+> migration archaeology by hand. **Tools 1 (`spinel-migrate`) and 2
+> (`spinel-probe`) are now built** ([`tools/migrate/`](../tools/migrate/),
+> [`tools/probe/`](../tools/probe/)); tools 3–4 remain proposals.
 
 ## The problem, from a real case
 
@@ -40,7 +42,7 @@ it**; these tools make that role first-class.
 
 ## Proposed tools
 
-### 1. `spinel-migrate` — the parity probe (highest leverage)
+### 1. `spinel-migrate` — the parity probe (highest leverage) · **built**
 
 Given a project's build targets and two compilers (the current pin and a
 candidate, e.g. master), compile every target with both and report a **go/no-go
@@ -64,7 +66,7 @@ and if not, what exactly is in the way?*
 Reuses: doctor's compile/attribution legs, the symbol map, `#line`. New: target
 discovery (read a project's build entrypoints), the two-compiler diff, the rollup.
 
-### 2. `spinel-probe` — capability & layout manifest (the substrate)
+### 2. `spinel-probe` — capability & layout manifest (the substrate) · **built**
 
 A one-shot that interrogates a `$SPINEL_DIR` and prints a manifest:
 
