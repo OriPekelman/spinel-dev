@@ -4,9 +4,10 @@
 > compiler rewrite** (the `f6d5eef..b60fbd7` wave, 763 commits, June 2026). This
 > doc generalizes that experience into reusable tooling so toy / tep / spinelgems
 > can track a fast-moving `matz/master` without each one re-deriving the same
-> migration archaeology by hand. **Tools 1 (`spinel-migrate`) and 2
-> (`spinel-probe`) are now built** ([`tools/migrate/`](../tools/migrate/),
-> [`tools/probe/`](../tools/probe/)); tools 3–4 remain proposals.
+> migration archaeology by hand. **All four tools are now built**:
+> `spinel-migrate` + `spinel-gate-bisect` ([`tools/migrate/`](../tools/migrate/)),
+> `spinel-probe` ([`tools/probe/`](../tools/probe/)), and `spinel-reduce-project`
+> ([`tools/reduce/`](../tools/reduce/)).
 
 ## The problem, from a real case
 
@@ -87,16 +88,27 @@ Reuses: the detection logic already written into `bisect.sh` (LEGACY_DIR) and
 `doctor.sh` (strict-vs-emit-0). New: consolidate + emit as a manifest; have the
 other tools consume it.
 
-### 3. `spinel-gate-bisect` — first-bad compiler commit for a project gate
+### 3. `spinel-gate-bisect` — first-bad compiler commit for a project gate · **built**
 
-Wrap `git bisect run` over a spinel rev range with the project's own gate
-(compile / boot / test) as the discriminator, skipping toolchain-broken revs
-(exit 125). The siblings ran this **by hand** for the #13/#14 regressions
-(d6756fa, the 59-skip wall). Distinct from `value-bisect`, which localizes a value
-*within* one compile: this localizes *which upstream commit* first broke the app.
+`spinel-gate-bisect.sh` wraps `git bisect run` over a spinel rev range: at each
+candidate it builds the compiler, then runs the project gate as the
+discriminator, skipping toolchain-broken revs (exit 125). The siblings ran this
+**by hand** for the #13/#14 regressions (d6756fa, the 59-skip wall). Distinct
+from `value-bisect`, which localizes a value *within* one compile: this localizes
+*which upstream commit* first broke the app.
 
-Reuses: the gate-running + skip discipline from the manual bisects. New: the
-`git bisect run` wrapper + a project-gate adapter.
+Two gate modes: the built-in `--compile <entry> --bad-when <regex>` (compile the
+target → clean = GOOD, the regression regex = BAD, any *other* failure = SKIP —
+the three-way classification that stops an unrelated breakage at an intermediate
+rev from mis-bisecting), or a generic `--gate <cmd>` whose exit code (0/1/125) is
+the verdict, run with `SPINEL_DIR`/`SPINEL_BIN` pointing at the freshly built
+compiler. Reports the first-bad commit, or — honestly — the candidate set when
+skips block a unique answer. Restores the repo's HEAD on exit (incl. Ctrl-C); use
+a dedicated `git worktree` since bisect moves HEAD.
+
+Reuses: the compile + error-regex discriminator from `spinel-migrate`/
+`spinel-reduce-project`, the gate + skip discipline from the manual bisects. New:
+the `git bisect run` orchestration + HEAD-restore safety.
 
 ### 4. `spinel-reduce-project` — multi-file-aware reduction · **built**
 

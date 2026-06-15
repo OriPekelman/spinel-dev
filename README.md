@@ -93,9 +93,10 @@ not boxing-bound**, a decomposition the flamegraph makes legible at a glance.
 Write-up: [docs/08](docs/08-perf-analysis.md), discussion on
 [spinel-dev#5](https://github.com/OriPekelman/spinel-dev/issues/5)/[#7](https://github.com/OriPekelman/spinel-dev/issues/7).
 
-### spinel-migrate / spinel-probe — track a moving compiler
+### spinel-migrate / spinel-probe / spinel-gate-bisect — track a moving compiler
 [`tools/migrate/`](tools/migrate/) · `spinel-migrate.rb --to <dir> [--from <dir>] [--rbs DIR] <target.rb>...`
 [`tools/probe/`](tools/probe/) · `spinel-probe.rb [--json]`
+[`tools/migrate/`](tools/migrate/) · `spinel-gate-bisect.sh --repo <dir> --good <rev> --bad <rev> --compile <entry.rb> --bad-when <regex>`
 
 When `matz/master` makes a large change (the June 2026 **Ruby→C rewrite** is the
 motivating case), these answer *can my project move, and if not, what's blocking?*
@@ -108,7 +109,13 @@ version-guard debt the other tools accreted): a one-shot manifest of a checkout'
 **driver** (C binary vs legacy shell), **layout** (`legacy/`-split vs root),
 supported `--emit-*` flags, **error model** (strict hard-error vs silent emit-0),
 and **symbol-map mode** (emit-only vs ride-along) — so tools and downstream
-Makefiles adapt to a layout/flag shift at one tested point. Design: [docs/09](docs/09-tracking-upstream-migrations.md).
+Makefiles adapt to a layout/flag shift at one tested point. And when a master
+bump *breaks* the project, `spinel-gate-bisect` wraps `git bisect run` over the
+spinel rev range: it builds each candidate, runs the project gate as the
+discriminator (compile the target; clean = good, the regression regex = bad,
+any other failure = **skip**), and reports the first-bad commit — the
+toolchain-broken-→-skip discipline the manual #13/#14 bisects needed, automated.
+Design: [docs/09](docs/09-tracking-upstream-migrations.md).
 
 ## Getting started
 
