@@ -117,6 +117,40 @@ any other failure = **skip**), and reports the first-bad commit — the
 toolchain-broken-→-skip discipline the manual #13/#14 bisects needed, automated.
 Design: [docs/09](docs/09-tracking-upstream-migrations.md).
 
+## Keeping up with master
+
+Spinel is **pre-alpha** and moves fast — `matz/master` shifted three times in a
+single afternoon of this work (a layout move, then individual codegen fixes). We
+build *real* projects on it anyway ([toy](https://github.com/OriPekelman/toy), a
+pure-Ruby ML stack; [tep](https://github.com/OriPekelman/tep), a web framework),
+and that's deliberate: a whole-program AOT compiler only gets exercised by whole
+programs. Compiling a real surface flushes out bugs no unit test reaches — the
+poly-size `Array.new`, the `$stderr.puts`-in-value-position, the surface-dependent
+element-typing collapses — all of which surfaced *because* something downstream
+broke, and several of which are now fixed upstream as a result.
+
+The cost is that every master bump can break the build. The goal of the
+[migration tools](#spinel-migrate--spinel-probe--spinel-gate-bisect--track-a-moving-compiler)
+is to make absorbing that **as painless as possible — without slowing upstream
+down.** matz moving fast is a feature; the downstream's job is to keep pace
+cleanly, not to ask the compiler to wait. So when a bump breaks a project, the
+discipline is to triage *which kind* of break it is and respond in kind:
+
+- **A usage issue** — the lib leaned on behavior that legitimately changed, or
+  carried a workaround the compiler has since obsoleted. → **refactor the lib.**
+  (The right outcome; the workaround was debt.)
+- **An actual regression** — the compiler miscompiles valid Ruby. → **file a
+  clear, minimal reproducer** (and, where we can, the fix). A 12-line repro and a
+  one-line PR cost upstream almost nothing to accept; a "toy doesn't build"
+  bug report costs a lot.
+
+The tools exist to make that triage fast and the reproducers clean: `probe` says
+what changed in the compiler's shape, `migrate` says which targets a bump breaks
+and where, `reduce-project` turns a multi-file miscompile into a filable repro,
+and `gate-bisect` pins the commit when it's a regression. That loop —
+build-real-on-pre-alpha → triage → refactor-or-reduce → upstream — is the whole
+point of this repo's second phase.
+
 ## Getting started
 
 You need a built `spinel` (the AOT compiler). Point the standalone tools at it
