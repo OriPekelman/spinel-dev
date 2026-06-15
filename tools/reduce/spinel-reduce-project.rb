@@ -243,6 +243,12 @@ live.each do |f|
     lines = content[f].lines
     i = 0
     while i < lines.size
+      # Skip comment-only / blank lines as candidates: they can't change the
+      # generated C, so trying to remove them would only burn a build each.
+      if lines[i] =~ /\A\s*(#.*)?\z/
+        i += 1
+        next
+      end
       cand = lines[0...i] + (lines[(i + 1)..] || [])
       if !cand.empty? && (system("ruby", "-c", "-e", cand.join, out: File::NULL, err: File::NULL) rescue false) && reproduces?(content.merge(f => cand.join), target)
         content = content.merge(f => cand.join)
