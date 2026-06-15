@@ -98,18 +98,25 @@ Wrap `git bisect run` over a spinel rev range with the project's own gate
 Reuses: the gate-running + skip discipline from the manual bisects. New: the
 `git bisect run` wrapper + a project-gate adapter.
 
-### 4. Multi-file-aware reduction (extend `spinel-reduce`)
+### 4. `spinel-reduce-project` — multi-file-aware reduction · **built**
 
 The f7ae245 signature — *isolated probe compiles, full surface miscompiles* —
 defeats single-file ddmin: two of the serve blockers (`backoff`, the multi-arg
 `realize_for`) would not minimize in isolation and had to be filed un-reduced.
-Extend `spinel-reduce` to reduce across the **compilation unit** (preserve the
-`require_relative` graph; shrink the whole surface, not one file), with
-`spinel-migrate`'s per-target failure as the oracle. This is what turns "serve
-fails somewhere in 40 files" into a filable minimal repro.
+`spinel-reduce-project` ([`tools/reduce/spinel-reduce-project.rb`](../tools/reduce/spinel-reduce-project.rb))
+reduces across the real `require_relative` graph, preserving the compilation
+unit. Crucially the oracle is the project's **own build** (`spinel [--rbs DIR]
+<entry> -o bin`), not `doctor -c` on a flattened file — so `--rbs`, FFI
+link/cflags, and require resolution behave exactly as in the real build (a
+flattened single file breaks FFI and mis-resolves requires; `doctor` doesn't
+pass `--rbs`). Two ddmin passes: drop whole files from the graph (empty their
+bodies), then drop top-level defs/classes from the survivors, keeping only what
+still reproduces the target error. The minimal file set + surviving defs is a
+filable repro.
 
-Reuses: `spinel-reduce`'s ddmin + doctor oracle. New: require-graph-aware
-candidate generation.
+Reuses: `spinel-reduce`'s ddmin + block logic, `spinel-flatten`'s require-graph
+DFS. New: the real-build oracle, file-granularity reduction, in-place mutate
+with restore-on-exit.
 
 ## Suggested order
 

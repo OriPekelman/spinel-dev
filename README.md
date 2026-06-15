@@ -34,7 +34,7 @@ boxed as int), and the **behavior** diff vs CRuby. Verdict from `clean` to
 of known degrades, non-zero exit on a *new* degrade, a disagreement, a codegen
 error, or a miscompile.
 
-### `spinel-reduce` / `spinel-flatten` — minimal repro from a degrade
+### `spinel-reduce` / `spinel-flatten` / `spinel-reduce-project` — minimal repro from a degrade
 [`tools/reduce/`](tools/reduce/) · `spinel-reduce.rb [--target SUBSTR] <degrading.rb>`
 
 Delta-debugs a degrading program to its **minimal trigger** (ddmin with `doctor
@@ -42,6 +42,17 @@ Delta-debugs a degrading program to its **minimal trigger** (ddmin with `doctor
 reproduces; what survives is the cause. `spinel-flatten` inlines a gem's
 `require_relative` graph into one file first, so `spinel-flatten smoke.rb | …`
 turns a real gem's failing smoke into a minimal bug report automatically.
+
+`spinel-reduce-project` handles the case single-file ddmin can't: a
+**surface-dependent** miscompile where an isolated probe compiles but the full
+multi-file compilation unit fails (the "f7ae245 signature" — a poly/array
+element type that degrades only once enough of the program is in scope). It
+reduces across the real `require_relative` graph, using the project's **own
+build** as the oracle (`spinel [--rbs DIR] <entry> -o bin`, so `--rbs`, FFI
+link/cflags, and require resolution behave exactly as in the real build —
+which `doctor -c` on a flattened file can't reproduce). Two passes: drop whole
+files from the graph, then drop top-level defs/classes from the survivors. What
+remains is the minimal multi-file surface that still triggers the error.
 
 ### value-bisect — differential value localization
 [`tools/value-bisect/`](tools/value-bisect/) · `bisect.sh [--json] <program.rb>`
