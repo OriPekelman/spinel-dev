@@ -3,10 +3,16 @@
 #
 # Runs the cheap-to-expensive battery and says, in one place, everything risky
 # about compiling <program.rb> with Spinel:
-#   1. compile probe   — `spinel -c`, scrape `cannot resolve call ... (emitting 0)`:
-#                        the loud silent-degrade signal (a call Spinel can't lower).
+#   1. compile probe   — `spinel -c`. The LEGACY Ruby compiler silently degrades
+#                        an unlowerable call to `emitting 0` (`cannot resolve
+#                        call ...`); the C `spinel` (post Ruby->C rewrite) is
+#                        strict — it HARD-ERRORS (`spinel: unsupported ...`) and
+#                        emits no C. Both signals (+ the exit code) are captured.
 #   2. inference scan  — `spinel --emit-rbs`, surface methods whose signature
 #                        widened to `untyped` (the boxed poly slow path / a gap).
+#   2c. codegen build  — `cc -c` the emitted C. For the strict C compiler this is
+#                        the primary leg: its toy-parity gaps surface as cc type
+#                        errors here, not as silent emit-0.
 #   3. behavior check  — the value-bisection harness vs CRuby (best-effort): does
 #                        the compiled binary actually match CRuby? (silent
 #                        miscompiles emit no warning, so only this catches them.)
@@ -52,12 +58,34 @@ trap 'rm -rf "$WORK"' EXIT
 # count non-empty lines of a (possibly empty) string, robustly.
 nlines() { if [ -z "$1" ]; then echo 0; else printf '%s\n' "$1" | grep -c .; fi; }
 
-# 1. Compile probe: collect `cannot resolve call to 'X' ... (emitting 0)`.
-# The symbol map (matz/spinel#1345) rides along on the same codegen run; a
-# pre-#1345 spinel ignores the env var and the map stays absent.
-SPINEL_EMIT_SYMBOL_MAP="$WORK/x.symbols.json" "$SPINEL" "$SRC" -c -o "$WORK/x.c" >"$WORK/cc.out" 2>&1
+# 1. Compile probe. Two compiler error models:
+#   - LEGACY Ruby compiler: silently degrades an unlowerable call to `emitting 0`
+#     and keeps going (`cannot resolve call to 'X' on Y (emitting 0)`).
+#   - C `spinel` (post Ruby->C rewrite): strict — it HARD-ERRORS such a construct
+#     (`spinel: unsupported ...`, non-zero exit) and emits no C, so the legacy
+#     emit-0 grep would FALSELY read "clean". Capture the exit code + the C
+#     compiler's own `spinel:` diagnostics too.
+# Codegen probe — NO symbol-map env here. The C compiler treats
+# --emit-symbol-map / its SPINEL_EMIT_SYMBOL_MAP env as an emit-ONLY mode (writes
+# the map, emits an EMPTY .c, exits 0), which would defeat both this leg and the
+# cc-build leg (2c). The legacy compiler instead rode the env along with normal
+# codegen. So probe codegen first, clean.
+"$SPINEL" "$SRC" -c -o "$WORK/x.c" >"$WORK/cc.out" 2>&1
+SPINEL_C_RC=$?
+# Symbol map (matz/spinel#1345) for leg 2c's C-symbol -> Ruby attribution,
+# emitted in a SEPARATE best-effort run (throwaway C) so it can't perturb the
+# probe above. Honored by both the legacy env path and the C emit-only mode.
+SPINEL_EMIT_SYMBOL_MAP="$WORK/x.symbols.json" "$SPINEL" "$SRC" -c -o "$WORK/xsym.c" >/dev/null 2>&1 || true
 UNRESOLVED=$(grep -E "cannot resolve call" "$WORK/cc.out" 2>/dev/null | sed 's/^[[:space:]]*//')
 N_UNRESOLVED=$(nlines "$UNRESOLVED")
+# C-compiler codegen refusal: `spinel: unsupported call/...`. Distinct from the
+# cc-build leg (2c) — this is spinel itself refusing to emit valid C. Gated on a
+# non-zero exit so a benign `spinel:` info line never trips it.
+CODEGEN_REFUSED=""
+if [ "$SPINEL_C_RC" -ne 0 ]; then
+  CODEGEN_REFUSED=$(grep -E "^spinel: (unsupported|.*unsupported type|C compilation failed)" "$WORK/cc.out" 2>/dev/null | sed 's/^[[:space:]]*//')
+fi
+N_CODEGEN_REFUSED=$(nlines "$CODEGEN_REFUSED")
 
 # 1a. Parse leg. spinel_parse couldn't build the AST — a syntax spinel's Prism
 # subset rejects (real gems hit this: e.g. colorize). Nothing downstream is
@@ -84,8 +112,12 @@ N_DEGRADED=$(nlines "$DEGRADED")
 N_UNTYPED=$(grep -E "^\s*(def |attr_|@)" "$WORK/x.rbs" 2>/dev/null | grep -oE "untyped" | grep -c . 2>/dev/null)
 [ -z "$N_UNTYPED" ] && N_UNTYPED=0
 
-# 2b. Inference↔codegen disagreement (spinel-dev#9, proposals 2 & 4). The
-# silent-miscompile fingerprint: codegen emits-0 a call to a method that
+# 2b. Inference↔codegen disagreement (spinel-dev#9, proposals 2 & 4). LEGACY-ONLY:
+# this fingerprints the Ruby compiler's silent emit-0 (it cross-refs the `cannot
+# resolve ... (emitting 0)` lines against the RBS). The C `spinel` has no silent
+# emit-0 path — it either lowers via poly dispatch or HARD-ERRORS (caught by leg 1
+# / leg 2c) — so this leg is naturally empty there (no emit-0 lines to match).
+# The silent-miscompile fingerprint: codegen emits-0 a call to a method that
 # inference RESOLVED on a user class. That means the receiver's class was lost
 # at the codegen leg while the inference leg knew it — the call silently no-ops.
 # This is the malign subset of `on int` (proposal 4): an emit-0 on a *user*
@@ -197,7 +229,7 @@ fi
 # Skipped when the codegen leg already failed — there's no valid binary to run.
 BEHAVIOR="skipped"
 BEHAVIOR_JSON='null'
-if [ "$DO_BISECT" -eq 1 ] && [ "$N_CODEGEN" -eq 0 ] && [ "$N_PARSE" -eq 0 ] && [ -x "$BISECT" ]; then
+if [ "$DO_BISECT" -eq 1 ] && [ "$N_CODEGEN" -eq 0 ] && [ "$N_CODEGEN_REFUSED" -eq 0 ] && [ "$N_PARSE" -eq 0 ] && [ -x "$BISECT" ]; then
   BJSON=$(SPINEL_DIR="$SPINEL_DIR" "$BISECT" --json $NOCRUBY_FLAG "$SRC" -- "$@" 2>/dev/null)
   V=$(printf '%s' "$BJSON" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("verdict","?"))' 2>/dev/null)
   if [ -n "$V" ]; then BEHAVIOR="$V"; BEHAVIOR_JSON="$BJSON"; else BEHAVIOR="unavailable"; fi
@@ -220,6 +252,10 @@ if [ "$BEHAVIOR" = "diverge" ] || [ "$BEHAVIOR" = "crash" ] || [ "$BEHAVIOR" = "
 # A codegen error means the program doesn't even build — definitive, and it
 # trumps the rest (there's no binary to have behavior). Set last.
 if [ "$N_CODEGEN" -gt 0 ]; then OVERALL="codegen-error"; fi
+# The strict C compiler refusing to emit valid C (`spinel: unsupported ...`,
+# non-zero exit) is the same tier: no C, no binary. (The legacy compiler instead
+# emits-0 and is caught by N_UNRESOLVED above, a softer "degrades".)
+if [ "$N_CODEGEN_REFUSED" -gt 0 ]; then OVERALL="codegen-error"; fi
 # A parse error is the earliest, most fundamental failure — spinel couldn't even
 # build the AST, so every other leg's reading is moot. Trumps all. Set last.
 if [ "$N_PARSE" -gt 0 ]; then OVERALL="parse-error"; fi
@@ -234,6 +270,8 @@ parse_errors = [l.strip() for l in cc
                 if re.match(r"^Parse error", l) or re.search(r"unexpected .*(expecting|ignoring)", l)]
 ignored_requires = [re.sub(r"^\s*warning:\s*", "", l).strip()
                     for l in cc if re.search(r"(call|require) is ignored", l, re.I)]
+codegen_refused = [l.strip() for l in cc
+                   if re.match(r"^spinel: (unsupported|.*unsupported type|C compilation failed)", l)]
 try:
     degraded = [re.sub(r" # spinel:.*", "", l).strip() for l in open(rbspath, errors="replace") if "# spinel: widened" in l]
 except OSError:  # emit-rbs produces no file on a parse-error input
@@ -245,7 +283,7 @@ except OSError:
 codegen = {"error_class": cg_cls, "symbol": cg_sym, "ruby": (cg_ruby or None), "message": cg_msg, "source": (cg_src or None)} if cg_cls else None
 out = {"file": src, "verdict": overall,
        "parse_errors": parse_errors,
-       "compile": {"unresolved_calls": unresolved, "ignored_requires": ignored_requires},
+       "compile": {"unresolved_calls": unresolved, "ignored_requires": ignored_requires, "codegen_refused": codegen_refused},
        "inference": {"degraded_methods": degraded, "untyped_count": int(nt or 0)},
        "disagreements": disagreements,
        "codegen": codegen,
@@ -270,11 +308,14 @@ if [ "$N_IGNORED_REQ" -gt 0 ]; then
     printf '               module makes every call to it resolve "on int" and emit 0.\n'
   fi
 fi
-if [ "$N_UNRESOLVED" -gt 0 ]; then
-  printf '  compile    ⚠ %s unresolved call(s) — Spinel silently emits 0:\n' "$N_UNRESOLVED"
+if [ "$N_CODEGEN_REFUSED" -gt 0 ]; then
+  printf '  compile    ✗ spinel refused to emit C (strict C compiler) — %s diagnostic(s):\n' "$N_CODEGEN_REFUSED"
+  printf '%s\n' "$CODEGEN_REFUSED" | head -6 | sed 's/^/               - /'
+elif [ "$N_UNRESOLVED" -gt 0 ]; then
+  printf '  compile    ⚠ %s unresolved call(s) — the legacy compiler silently emits 0:\n' "$N_UNRESOLVED"
   printf '%s\n' "$UNRESOLVED" | sed 's/^/               - /'
 else
-  printf '  compile    ✓ no unresolved calls\n'
+  printf '  compile    ✓ no unresolved/unsupported calls\n'
 fi
 if [ "$N_DEGRADED" -gt 0 ]; then
   printf '  inference  ⚠ %s method(s) widened to untyped (slow path / inference gap):\n' "$N_DEGRADED"

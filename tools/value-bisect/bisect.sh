@@ -22,13 +22,28 @@
 #   CC                   C compiler (default: cc)
 #
 # The Spinel build uses the Ruby interpreter path (ruby spinel_analyze.rb /
-# spinel_codegen.rb) so the harness always reflects the current compiler
-# source and does not depend on a `make` rebuild.
+# spinel_codegen.rb) for its separable parse|analyze|codegen stages (the
+# harness reads the parser FILE table and post-processes the #line C). Since
+# the matz/spinel Ruby->C rewrite this Ruby backend lives in $SPINEL_DIR/legacy/
+# (the regression oracle); LEGACY_DIR (below) auto-detects that layout and falls
+# back to the pre-rewrite root layout. NOTE: this bisects the LEGACY Ruby
+# compiler, not the C `spinel` binary — adequate for value-divergence
+# localization against the oracle and for historical Ruby-compiler regressions;
+# bisecting the C compiler itself (via `spinel --debug -c`) is a separate,
+# larger migration.
 
 set -e
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 SPINEL_DIR="${SPINEL_DIR:-$HOME/sites/spinel}"
+# Post-rewrite the Ruby backend moved to legacy/; the runtime lib/ stayed at the
+# checkout root in both layouts. Resolve the dir that actually holds the Ruby
+# compiler scripts + parse binary.
+if [ -f "$SPINEL_DIR/legacy/spinel_analyze.rb" ]; then
+  LEGACY_DIR="$SPINEL_DIR/legacy"
+else
+  LEGACY_DIR="$SPINEL_DIR"
+fi
 CC="${CC:-cc}"
 INT_OVERFLOW="${SPINEL_INT_OVERFLOW:-raise}"
 
@@ -63,7 +78,7 @@ if [ ! -f "$SRC" ]; then
   echo "bisect: $SRC: no such file" >&2
   exit 2
 fi
-PARSE_BIN="$SPINEL_DIR/spinel_parse"
+PARSE_BIN="$LEGACY_DIR/spinel_parse"
 if [ ! -x "$PARSE_BIN" ]; then
   echo "bisect: $PARSE_BIN missing; run 'make parse' in $SPINEL_DIR first" >&2
   exit 2
@@ -165,8 +180,8 @@ fi
 
 # --- Spinel --debug build (explicit Ruby path; mirrors `spinel --debug`) -----
 echo "bisect: compiling with Spinel (--debug)..." >&2
-ruby "$SPINEL_DIR/spinel_analyze.rb" "$WORK/ast" "$WORK/ir"
-ruby "$SPINEL_DIR/spinel_codegen.rb" "$WORK/ast" "$WORK/ir" "$WORK/out.c"
+ruby "$LEGACY_DIR/spinel_analyze.rb" "$WORK/ast" "$WORK/ir"
+ruby "$LEGACY_DIR/spinel_codegen.rb" "$WORK/ast" "$WORK/ir" "$WORK/out.c"
 
 # `#line` directives corrupt clang's DWARF variable-location info, so lldb reads
 # a function's locals from the wrong stack slot (their zero-init) whenever the
