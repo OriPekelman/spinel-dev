@@ -50,7 +50,7 @@ def load_symbol_map(path)
   rows = JSON.parse(File.read(path))["symbols"] || []
   rows.each { |s| SYM_MAP[s["c"]] = s["ruby"] unless s["c"].to_s.empty? }
 rescue StandardError
-  SYM_MAP.clear # older spinel: no/strange map -> heuristic only
+  SYM_MAP.clear # corrupt/empty map -> fall back to the heuristic demangler
 end
 
 def demangle(sym) # sp_<Class>_<method> -> Class#method / Class.method / bare
@@ -78,11 +78,13 @@ Dir.mktmpdir("spinel_perf") do |w|
   cfile = File.join(w, "out.c")
   symjson = File.join(w, "out.symbols.json")
   # `-g -c`: emit C *with* #line directives so gprof -l maps samples to the .rb.
-  # SPINEL_EMIT_SYMBOL_MAP rides along on the same codegen run (no extra
-  # compile); a pre-#1345 spinel simply ignores it.
-  unless system({ "SPINEL_EMIT_SYMBOL_MAP" => symjson }, SPINEL, "-g", src, "-c", "-o", cfile, out: File::NULL, err: File::NULL) && File.size?(cfile)
+  # NB: do NOT set SPINEL_EMIT_SYMBOL_MAP here — the C compiler treats it as an
+  # emit-ONLY mode and writes an EMPTY .c, which would make the build below fail.
+  unless system(SPINEL, "-g", src, "-c", "-o", cfile, out: File::NULL, err: File::NULL) && File.size?(cfile)
     abort "spinel-perf: codegen failed (does it compile? try `spinel doctor`)"
   end
+  # Symbol map in a SEPARATE best-effort run (throwaway C), for exact frame names.
+  system({ "SPINEL_EMIT_SYMBOL_MAP" => symjson }, SPINEL, src, "-c", "-o", File.join(w, "sym.c"), out: File::NULL, err: File::NULL)
   load_symbol_map(symjson) if File.size?(symjson)
   c = File.read(cfile)
   links  = c.scan(%r{^/\* SPINEL_LINK: (.*) \*/$}).flatten.join(" ")
@@ -107,27 +109,20 @@ Dir.mktmpdir("spinel_perf") do |w|
   abort "spinel-perf: no gmon.out — workload too short to sample; use a heavier input." if gmons.empty?
 
   base = File.basename(src)
-  # Degrade overlay. Prefer --emit-types (POSITION-keyed): a method can have a
-  # clean signature yet box internally — the Rails-view shape @rubys flagged
-  # (spinel-dev#5), which a method-boundary scan misses. Fall back to --emit-rbs
-  # (method-granularity) if the engine predates --emit-types (#1298).
-  poly_line = {}      # lineno -> true   (position granularity, preferred)
-  poly_meth = {}      # ruby method -> true  (signature granularity, fallback)
-  overlay = :rbs
+  # Degrade overlay via --emit-types (POSITION-keyed): a method can have a clean
+  # signature yet box internally — the Rails-view shape @rubys flagged
+  # (spinel-dev#5), which a method-boundary scan misses. Best-effort decoration;
+  # if the types JSON isn't produced the overlay is simply absent.
+  poly_line = {}      # lineno -> true
   tjson = File.join(w, "x.json")
   if system(SPINEL, src, "--emit-types", "-o", tjson, out: File::NULL, err: File::NULL) && File.size?(tjson)
     (JSON.parse(File.read(tjson))["types"] rescue []).each do |t|
       next unless t["type"].to_s.downcase =~ /poly|untyped/
       poly_line[t["line"]] = true if File.basename(t["file"].to_s) == base
     end
-    overlay = :types
-  else
-    rbs = File.join(w, "x.rbs")
-    system(SPINEL, src, "--emit-rbs", "-o", rbs, out: File::NULL, err: File::NULL)
-    File.foreach(rbs) { |l| (r = demangle("sp_#{$1}")) && (poly_meth[r] = true) if File.size?(rbs) && l.include?("untyped") && l =~ /^\s*def\s+([A-Za-z_]\w*)\s*:/ } if File.size?(rbs)
   end
-  # Is the hot (method, line) on the boxed slow path? Per-line when we have it.
-  is_poly = ->(m, l) { overlay == :types ? !!poly_line[l] : !!poly_meth[m] }
+  # Is the hot (method, line) on the boxed slow path?
+  is_poly = ->(_m, l) { !!poly_line[l] }
 
   lines = Hash.new(0.0)   # [ruby_method, lineno] -> self%
   runtime_pct = 0.0
@@ -160,7 +155,7 @@ Dir.mktmpdir("spinel_perf") do |w|
 
   if json
     out = { file: src, runtime_pct: runtime_pct.round(1), gc_pct: gc_pct.round(1),
-            runs: gmons.size, overlay: overlay,
+            runs: gmons.size, overlay: :types,
             hot_poly_pct_of_user: hot_poly_share.round(1),
             methods: methods.map { |m, p| { method: m, self_pct: p.round(1) } },
             lines: ranked.map { |(m, l), p| { method: m, line: l, self_pct: p.round(1),
@@ -168,7 +163,7 @@ Dir.mktmpdir("spinel_perf") do |w|
     puts JSON.generate(out); next
   end
 
-  gran = overlay == :types ? "per-line via --emit-types" : "per-method via --emit-rbs (no --emit-types; coarser)"
+  gran = "per-line via --emit-types"
   puts "spinel-perf: #{src}   (gprof -l, #line + -pg -O2, #{gmons.size} runs summed)"
   printf "  self-time split:  %.0f%% user · %.0f%% GC · %.0f%% other-runtime/inlined\n", lines.values.sum, gc_pct, runtime_pct
   if gc_pct >= 15.0
@@ -188,5 +183,5 @@ Dir.mktmpdir("spinel_perf") do |w|
          hot_slow.first(3).map { |(m, l), _| "#{m} @ #{base}:#{l}" }.join(", ")
     puts "    (un-inferred dynamism, where it's hot — type those to speed up.)"
   end
-  puts "\n  (spike — gprof's per-line is coarse on short runs; a permitted `perf` would\n   sharpen it. ⚠ is #{overlay == :types ? "per-line (--emit-types)" : "per-method (--emit-rbs fallback)"}.)"
+  puts "\n  (spike — gprof's per-line is coarse on short runs; a permitted `perf` would\n   sharpen it. ⚠ is per-line (--emit-types).)"
 end

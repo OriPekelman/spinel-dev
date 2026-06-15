@@ -26,34 +26,29 @@ json = ARGV.delete("--json")
 src = ARGV[0] or abort "usage: speedup-estimate.rb [--json] <program.rb>"
 abort "no such file: #{src}" unless File.file?(src)
 
-# Prefer --emit-types (POSITION granularity): a method can have a clean
-# signature yet box internally (the Rails-view shape @rubys flagged on
-# spinel-dev#5), which a method-boundary --emit-rbs scan misses. The untyped
-# share at position level is a much truer "how much dynamism survives" signal.
-# Fall back to --emit-rbs (signature granularity) if the engine predates
-# --emit-types (#1298).
+# --emit-types (POSITION granularity): a method can have a clean signature yet
+# box internally (the Rails-view shape @rubys flagged on spinel-dev#5), which a
+# method-boundary --emit-rbs scan misses. The untyped share at position level is
+# a much truer "how much dynamism survives" signal.
 tmp = "#{src}.estimate.json"
 granularity = "position (--emit-types)"
-if system(SPINEL, src, "--emit-types", "-o", tmp, out: File::NULL, err: File::NULL) && File.size?(tmp)
-  ts = (JSON.parse(File.read(tmp))["types"] rescue [])
-  File.delete(tmp)
-  abort "speedup-estimate: no inferred types (does it compile?)" if ts.empty?
-  types     = ts.map { |t| t["type"].to_s }
-  numeric   = types.count { |t| %w[int float bool].include?(t) }
-  container = types.count { |t| t =~ /\A(.*array|.*hash|set|range)/i }
-  untyped   = types.count { |t| t =~ /poly|untyped/ }
-else
-  rbs_path = "#{src}.estimate.rbs"
-  system(SPINEL, src, "--emit-rbs", "-o", rbs_path, out: File::NULL, err: File::NULL)
-  abort "speedup-estimate: neither --emit-types nor --emit-rbs produced output" unless File.size?(rbs_path)
-  rbs = File.read(rbs_path); File.delete(rbs_path)
-  granularity = "signature (--emit-rbs fallback — misses intra-method boxing)"
-  sig = rbs.lines.select { |l| l =~ /^\s*def / }
-  types     = sig.flat_map { |l| l.split(":", 2)[1].to_s.scan(/[A-Z][A-Za-z0-9_:]*|untyped|bool/) }
-  numeric   = types.count { |t| %w[Integer Float bool].include?(t) }
-  container = types.count { |t| t =~ /\A(Array|Hash|Set|Range)/ }
-  untyped   = types.count("untyped")
+abort "speedup-estimate: --emit-types produced no output (does it compile?)" \
+  unless system(SPINEL, src, "--emit-types", "-o", tmp, out: File::NULL, err: File::NULL) && File.size?(tmp)
+# The C `spinel` (and recent legacy builds) emit a types JSON. A spinel too old
+# for --emit-types instead compiles the program to a binary at `tmp` — non-JSON.
+ts = begin
+  JSON.parse(File.read(tmp))["types"]
+rescue JSON::ParserError
+  abort "speedup-estimate: #{SPINEL} did not emit a types JSON — it must support " \
+        "--emit-types (the C spinel or a recent legacy build)."
+ensure
+  File.delete(tmp) if File.exist?(tmp)
 end
+abort "speedup-estimate: no inferred types (does it compile?)" if ts.nil? || ts.empty?
+types     = ts.map { |t| t["type"].to_s }
+numeric   = types.count { |t| %w[int float bool].include?(t) }
+container = types.count { |t| t =~ /\A(.*array|.*hash|set|range)/i }
+untyped   = types.count { |t| t =~ /poly|untyped/ }
 
 untyped_ratio = types.empty? ? 0.0 : untyped.to_f / types.size
 numeric_share = types.empty? ? 0.0 : numeric.to_f / types.size

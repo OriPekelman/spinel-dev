@@ -47,7 +47,7 @@ def load_symbol_map(path)
   rows = JSON.parse(File.read(path))["symbols"] || []
   rows.each { |s| SYM_MAP[s["c"]] = s["ruby"] unless s["c"].to_s.empty? }
 rescue StandardError
-  SYM_MAP.clear # older spinel: no/strange map -> heuristic only
+  SYM_MAP.clear # corrupt/empty map -> fall back to the heuristic demangler
 end
 
 def classify(sym) # -> [:gc|:runtime|:user, ruby_label]
@@ -140,8 +140,11 @@ else
   Dir.mktmpdir("spinel_flame") do |w|
     cfile = File.join(w, "o.c")
     symjson = File.join(w, "o.symbols.json")
-    # Symbol map rides along on the same codegen run; pre-#1345 spinel ignores it.
-    system({ "SPINEL_EMIT_SYMBOL_MAP" => symjson }, SPINEL, "-g", src, "-c", "-o", cfile, out: File::NULL, err: File::NULL) or abort "codegen failed"
+    # Do NOT set SPINEL_EMIT_SYMBOL_MAP here — the C compiler treats it as an
+    # emit-ONLY mode (empty .c), which would break the build below. Emit the C
+    # first, then the symbol map in a separate best-effort run (throwaway C).
+    system(SPINEL, "-g", src, "-c", "-o", cfile, out: File::NULL, err: File::NULL) or abort "codegen failed"
+    system({ "SPINEL_EMIT_SYMBOL_MAP" => symjson }, SPINEL, src, "-c", "-o", File.join(w, "sym.c"), out: File::NULL, err: File::NULL)
     load_symbol_map(symjson) if File.size?(symjson)
     c = File.read(cfile)
     links = c.scan(%r{^/\* SPINEL_LINK: (.*) \*/$}).flatten.join(" ")
