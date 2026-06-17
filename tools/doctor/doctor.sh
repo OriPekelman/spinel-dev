@@ -8,6 +8,11 @@
 #                        call ...`); the C `spinel` (post Ruby->C rewrite) is
 #                        strict — it HARD-ERRORS (`spinel: unsupported ...`) and
 #                        emits no C. Both signals (+ the exit code) are captured.
+#   1c. silent degrade — SPINEL_WARN_UNRESOLVED: the C compiler still silently
+#                        lowers an unresolved call on a dynamic receiver (or a
+#                        `.new` on an unresolved constant) to nil/0 instead of
+#                        raising. The flag surfaces each such site (file:line) —
+#                        the C analogue of the legacy `emitting 0`.
 #   2. inference scan  — `spinel --emit-rbs`, surface methods whose signature
 #                        widened to `untyped` (the boxed poly slow path / a gap).
 #   2c. codegen build  — `cc -c` the emitted C. For the strict C compiler this is
@@ -70,7 +75,12 @@ nlines() { if [ -z "$1" ]; then echo 0; else printf '%s\n' "$1" | grep -c .; fi;
 # the map, emits an EMPTY .c, exits 0), which would defeat both this leg and the
 # cc-build leg (2c). The legacy compiler instead rode the env along with normal
 # codegen. So probe codegen first, clean.
-"$SPINEL" "$SRC" -c -o "$WORK/x.c" >"$WORK/cc.out" 2>&1
+# SPINEL_WARN_UNRESOLVED=1 (matz/spinel 5e53c78): default-off, zero codegen effect
+# — it only adds stderr `file:line: warning: unresolved ...` lines for the C
+# compiler's silent nil/0 degrade path (see leg 1c). Safe to ride the probe run;
+# the emitted x.c (and leg 2c) is byte-identical with or without it. Unknown env
+# on the legacy compiler → ignored, so this is harmless on both backends.
+SPINEL_WARN_UNRESOLVED=1 "$SPINEL" "$SRC" -c -o "$WORK/x.c" >"$WORK/cc.out" 2>&1
 SPINEL_C_RC=$?
 # Symbol map (matz/spinel#1345) for leg 2c's C-symbol -> Ruby attribution,
 # emitted in a SEPARATE best-effort run (throwaway C) so it can't perturb the
@@ -86,6 +96,19 @@ if [ "$SPINEL_C_RC" -ne 0 ]; then
   CODEGEN_REFUSED=$(grep -E "^spinel: (unsupported|.*unsupported type|C compilation failed)" "$WORK/cc.out" 2>/dev/null | sed 's/^[[:space:]]*//')
 fi
 N_CODEGEN_REFUSED=$(nlines "$CODEGEN_REFUSED")
+
+# 1c. Silent-degrade scan (matz/spinel 5e53c78, SPINEL_WARN_UNRESOLVED). The C
+# compiler hard-errors on MANY unlowerable calls (caught above) but it ALSO keeps
+# a silent degrade path: an unresolved call on a dynamically-typed receiver
+# (poly/nil/int/unknown), or a `.new` on an unresolved constant, lowers to a
+# typed nil/0 instead of raising — the C-compiler analogue of the legacy
+# `emitting 0`. With the WARN env on the probe above, each such site reports
+# `file:line: warning: unresolved ...`. These are exactly the silent miscompiles
+# CRuby would NoMethodError on — the most dangerous failure mode because nothing
+# else flags them. Some are deliberate (dead poly arms, inert stdlib like
+# Mutex/Pathname), so this is a warn-tier "degrades" signal, not a hard error.
+SILENT_DEGRADE=$(grep -E "^spinel: .*: warning: unresolved" "$WORK/cc.out" 2>/dev/null | sed 's/^spinel: //; s/^[[:space:]]*//')
+N_SILENT_DEGRADE=$(nlines "$SILENT_DEGRADE")
 
 # 1a. Parse leg. spinel_parse couldn't build the AST — a syntax spinel's Prism
 # subset rejects (real gems hit this: e.g. colorize). Nothing downstream is
@@ -114,9 +137,11 @@ N_UNTYPED=$(grep -E "^\s*(def |attr_|@)" "$WORK/x.rbs" 2>/dev/null | grep -oE "u
 
 # 2b. Inference↔codegen disagreement (spinel-dev#9, proposals 2 & 4). LEGACY-ONLY:
 # this fingerprints the Ruby compiler's silent emit-0 (it cross-refs the `cannot
-# resolve ... (emitting 0)` lines against the RBS). The C `spinel` has no silent
-# emit-0 path — it either lowers via poly dispatch or HARD-ERRORS (caught by leg 1
-# / leg 2c) — so this leg is naturally empty there (no emit-0 lines to match).
+# resolve ... (emitting 0)` lines against the RBS). The C `spinel` emits no such
+# line: it either HARD-ERRORS (caught by leg 1 / leg 2c) or silently degrades a
+# dynamic-receiver call to nil/0 — and that silent path is now surfaced directly
+# by leg 1c (SPINEL_WARN_UNRESOLVED), not via this RBS cross-ref. So this leg is
+# naturally empty on the C backend (no `emitting 0` lines to match).
 # The silent-miscompile fingerprint: codegen emits-0 a call to a method that
 # inference RESOLVED on a user class. That means the receiver's class was lost
 # at the codegen leg while the inference leg knew it — the call silently no-ops.
@@ -240,12 +265,14 @@ fi
 # (#9): stronger than a plain degrade, but not behavior-confirmed, so it gets
 # its own tier between them.
 OVERALL="clean"
-if [ "$N_UNRESOLVED" -gt 0 ] || [ "$N_DEGRADED" -gt 0 ]; then OVERALL="degrades"; fi
-# An ignored require is itself a degrade; paired with an emit-0 cascade it's the
-# likely root cause, so escalate to the static-miscompile tier.
+# N_SILENT_DEGRADE is the C-compiler analogue of the legacy N_UNRESOLVED (emit-0):
+# both are unresolved calls lowered to nil/0, so they share the "degrades" tier.
+if [ "$N_UNRESOLVED" -gt 0 ] || [ "$N_DEGRADED" -gt 0 ] || [ "$N_SILENT_DEGRADE" -gt 0 ]; then OVERALL="degrades"; fi
+# An ignored require is itself a degrade; paired with an emit-0/degrade cascade
+# it's the likely root cause, so escalate to the static-miscompile tier.
 if [ "$N_IGNORED_REQ" -gt 0 ]; then
   [ "$OVERALL" = "clean" ] && OVERALL="degrades"
-  if [ "$N_UNRESOLVED" -gt 0 ] || [ "$N_DISAGREE" -gt 0 ]; then OVERALL="miscompile-risk"; fi
+  if [ "$N_UNRESOLVED" -gt 0 ] || [ "$N_SILENT_DEGRADE" -gt 0 ] || [ "$N_DISAGREE" -gt 0 ]; then OVERALL="miscompile-risk"; fi
 fi
 if [ "$N_DISAGREE" -gt 0 ]; then OVERALL="miscompile-risk"; fi
 if [ "$BEHAVIOR" = "diverge" ] || [ "$BEHAVIOR" = "crash" ] || [ "$BEHAVIOR" = "abort" ] || [ "$BEHAVIOR" = "output-differ" ]; then OVERALL="miscompiles"; fi
@@ -272,6 +299,8 @@ ignored_requires = [re.sub(r"^\s*warning:\s*", "", l).strip()
                     for l in cc if re.search(r"(call|require) is ignored", l, re.I)]
 codegen_refused = [l.strip() for l in cc
                    if re.match(r"^spinel: (unsupported|.*unsupported type|C compilation failed)", l)]
+silent_degrades = [re.sub(r"^spinel:\s*", "", l).strip() for l in cc
+                   if re.search(r": warning: unresolved", l)]
 try:
     degraded = [re.sub(r" # spinel:.*", "", l).strip() for l in open(rbspath, errors="replace") if "# spinel: widened" in l]
 except OSError:  # emit-rbs produces no file on a parse-error input
@@ -283,7 +312,7 @@ except OSError:
 codegen = {"error_class": cg_cls, "symbol": cg_sym, "ruby": (cg_ruby or None), "message": cg_msg, "source": (cg_src or None)} if cg_cls else None
 out = {"file": src, "verdict": overall,
        "parse_errors": parse_errors,
-       "compile": {"unresolved_calls": unresolved, "ignored_requires": ignored_requires, "codegen_refused": codegen_refused},
+       "compile": {"unresolved_calls": unresolved, "silent_degrades": silent_degrades, "ignored_requires": ignored_requires, "codegen_refused": codegen_refused},
        "inference": {"degraded_methods": degraded, "untyped_count": int(nt or 0)},
        "disagreements": disagreements,
        "codegen": codegen,
@@ -316,6 +345,11 @@ elif [ "$N_UNRESOLVED" -gt 0 ]; then
   printf '%s\n' "$UNRESOLVED" | sed 's/^/               - /'
 else
   printf '  compile    ✓ no unresolved/unsupported calls\n'
+fi
+if [ "$N_SILENT_DEGRADE" -gt 0 ]; then
+  printf '  degrade    ⚠ %s silent unresolved-call degrade(s) — the C compiler lowered these to\n' "$N_SILENT_DEGRADE"
+  printf '             nil/0 where CRuby would raise (some may be deliberate dead/inert paths):\n'
+  printf '%s\n' "$SILENT_DEGRADE" | head -10 | sed 's/^/               - /'
 fi
 if [ "$N_DEGRADED" -gt 0 ]; then
   printf '  inference  ⚠ %s method(s) widened to untyped (slow path / inference gap):\n' "$N_DEGRADED"
