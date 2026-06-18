@@ -1,6 +1,16 @@
 #!/bin/sh
 # spinel doctor — one-shot risk report for a Spinel program.
 #
+# Upstream alignment (matz/spinel f3bb9af9+): the compiler now ships a first-party
+# `spinel-doctor` (tools/, compiled, cc-only) covering build / unsupported /
+# unresolved / requires / behavior(stdout-diff), plus an `inference` widened-to-
+# untyped leg we contributed (matz/spinel#1476). THIS script is the DEEP/differential
+# doctor that goes beyond it: the inference↔codegen disagreement fingerprint (leg 2b),
+# symbol-map attribution of the failing C symbol -> Ruby method (leg 2c), and a
+# value-bisection behavior leg (scalar-local pin, first-divergent (file,line,var),
+# FFI/AOT single-sided --no-cruby) instead of a plain stdout diff. Prefer the
+# first-party `spinel-doctor` for a quick check; use this for the differential dig.
+#
 # Runs the cheap-to-expensive battery and says, in one place, everything risky
 # about compiling <program.rb> with Spinel:
 #   1. compile probe   — `spinel -c`. The LEGACY Ruby compiler silently degrades

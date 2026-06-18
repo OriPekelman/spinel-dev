@@ -4,6 +4,12 @@
 # SPIKE — spinel-reduce: delta-debug a degrading program to its minimal trigger
 # (spinel-dev#9 proposal 5).
 #
+# Upstream now ships a first-party `spinel-reduce` for the basic case (ddmin a
+# compile failure). This one is the specialized layer on top: it reduces against
+# `doctor`'s SEMANTIC findings (inference↔codegen disagreement, widened slot, the
+# failing C symbol), adds --shrink-ints size-threshold parameter search, and runs
+# on FFI/AOT apps via --no-cruby. See tools/reduce/README.md for when to use which.
+#
 # A size-/complexity-triggered Spinel degrade (an emit-0, an inference↔codegen
 # disagreement, a widened slot) is brutal to localize by hand — you bisect dims,
 # requires, ivar count, FFI-call count. This automates it: ddmin (delta

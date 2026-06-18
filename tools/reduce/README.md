@@ -1,5 +1,20 @@
 # spinel-reduce
 
+> **Upstream alignment (matz/spinel `f3bb9af9`+).** The compiler now ships
+> first-party `spinel-reduce` and `spinel-flatten` in `tools/` (compiled by
+> spinel, runtime dep = `cc` only). Prefer those for the **basic** case:
+> ddmin a *compile failure* (`spinel` exits non-zero), and inline a
+> `require_relative` graph. Our tools here are the **specialized layer on top**:
+> - `spinel-reduce.rb` — reduces against **`doctor`'s semantic findings**
+>   (inference↔codegen disagreement, widened slot, the failing C symbol) rather
+>   than just compile-exit, adds **`--shrink-ints`** size-threshold parameter
+>   search, and works on FFI/AOT apps via **`--no-cruby`**. Kept.
+> - `spinel-flatten.rb` — now equivalent to upstream `spinel-flatten`;
+>   **deprecated**, prefer the first-party tool. Kept only as a no-build fallback.
+> - `spinel-reduce-project.rb` — multi-file, project-build oracle for
+>   whole-program (f7ae245-class) miscompiles upstream's single-file reduce
+>   can't reach. Kept; no upstream equivalent.
+
 Delta-debug a degrading Spinel program down to its **minimal trigger**
 ([spinel-dev#9](https://github.com/OriPekelman/spinel-dev/issues/9) proposal 5).
 

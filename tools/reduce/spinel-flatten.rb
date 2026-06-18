@@ -1,6 +1,9 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 #
+# DEPRECATED — matz/spinel now ships a first-party `spinel-flatten` (tools/, compiled
+# by spinel, cc-only). Prefer it; this Ruby spike is kept only as a no-build fallback.
+#
 # SPIKE — spinel-flatten: inline a `require_relative` graph into one self-contained
 # `.rb` (spinel-dev#10 part 3). Turns a gem's failing smoke test into a single
 # file `spinel-reduce` can ddmin, so the gem → minimal-repro pipeline is automatic:
