@@ -55,8 +55,9 @@ lldb -o 'b app.rb:42' -o run -o 'p lv_total' -o 'bt' app
 The backtrace shows your Ruby methods (`app.rb:in 'Parser#parse'`), across
 `require_relative`'d files.
 
-**Real `Exception#backtrace`.** Normally Spinel returns an empty backtrace; under
-`--debug` an exception carries the actual call chain:
+**Real `Exception#backtrace`.** Native `Exception#backtrace` (and `Kernel#caller`)
+is now wired upstream (#1300), so exceptions carry the actual call chain in any
+build; `--debug` improves the fidelity (real frames, line-accurate stepping):
 ```ruby
 begin
   risky

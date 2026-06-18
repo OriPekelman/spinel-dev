@@ -14,6 +14,12 @@ containers, bignums, Rational, plus an output-diff fallback and a single-sided
 ruby-lsp hover addon, and a daily rebase-and-verify routine keeping the fork
 current on upstream.
 
+> Note: upstream `matz/spinel` now ships first-party `tools/` of its own
+> (`spinel-doctor`, `spinel-reduce`, `spinel-flatten`). spinel-dev is the
+> **differential / migration / perf layer on top** — `doctor.sh` delegates the
+> basic checks to upstream `spinel-doctor` when present and layers the deep
+> differential legs; flattening is upstream's job now.
+
 ## Shipped since this gap-analysis was written
 
 - **A1** `make triage`, **A2** `spinel doctor`, **A3** `bisect.sh --json`,
@@ -40,8 +46,10 @@ This is where Spinel is actually developed (agents) and where gems get gated.
    pass/fail into pass/fail/**where**. (triage.sh + VERDICT lines exist; this is
    ~10 lines of Makefile.)
 2. **`spinel doctor app.rb`** — one command running the whole battery: compile
-   probe (`-c`, scrape `cannot resolve`), `--emit-rbs` degrade scan (count/locate
-   `untyped`), and `bisect.sh` if an oracle smoke exists. Emits a single report
+   probe (`-c`, catch `spinel: unsupported …` hard-errors and scrape
+   `SPINEL_WARN_UNRESOLVED` silent degrades), `--emit-rbs` degrade scan
+   (count/locate `untyped`), and `bisect.sh` if an oracle smoke exists. Emits a
+   single report
    (human + `--json`). This is the "tell me everything risky about this program"
    entry point an agent or CI wants.
 3. **`--json` everywhere.** `bisect.sh` should emit the structured finding (not
@@ -101,9 +109,10 @@ This is where Spinel is actually developed (agents) and where gems get gated.
    merge. Needs a stable Spinel↔CRuby method-name mapping (mangling-aware) —
    the same artifact the perf tools currently mirror by hand. Upstream RFC:
    [matz/spinel#1334](https://github.com/matz/spinel/issues/1334) (`--emit-symbol-map`).
-3. **`caller`** — the runtime `sp_caller_now()` is built; it needs a codegen
-   dispatch site (`Kernel#caller` is currently unsupported). Upstream RFC:
-   [matz/spinel#1335](https://github.com/matz/spinel/issues/1335).
+3. ~~**`caller`**~~ — **done.** `Kernel#caller` is now wired to the runtime
+   `sp_caller_now()` (merged via the native-backtrace PR
+   [#1300](https://github.com/matz/spinel/pull/1300)); the codegen dispatch site
+   exists, so `caller` is no longer unsupported.
 
 ### G. What the tooling still wants from the compiler (upstream RFCs)
 
@@ -116,8 +125,10 @@ compiler already knows*, in the lineage of the merged five:
   serialize the `sp_<sym>` ↔ `Class#method` + position map `sp_bt_symbol` already
   builds at runtime, so `tools/perf/` stops re-implementing the mangling (E2 above
   consumes the same map). *Cheap.*
-- **[#1335](https://github.com/matz/spinel/issues/1335)** wire `Kernel#caller` to
-  `sp_caller_now()` — a Ruby-level call tree for the profiler + harness (E3). *Cheap.*
+- ~~**[#1335](https://github.com/matz/spinel/issues/1335)** wire `Kernel#caller` to
+  `sp_caller_now()`~~ — **done**, merged via native backtrace
+  ([#1300](https://github.com/matz/spinel/pull/1300)); a Ruby-level call tree for
+  the profiler + harness (E3).
 - **[#1336](https://github.com/matz/spinel/issues/1336)** native sampling profiler
   (`spinel --profile`) — folded Ruby stacks via the backtrace machinery, replacing
   the approximate/locked-down `gprof`/`perf` path. *Bigger; the largest perf-story
@@ -127,11 +138,10 @@ compiler already knows*, in the lineage of the merged five:
 
 ### F. Packaging & upstreaming
 
-1. **PRs to `matz/spinel`** for the compiler surfaces — **underway**, one
-   reviewable PR at a time: `--emit-rbs` merged (#1276), `--debug` in review
-   (#1292), `--emit-types` queued, native backtrace + the null-receiver guard
-   after. Each is opt-in and output-neutral; the API shape (flag names, JSON
-   schema) is being settled in review.
+1. **PRs to `matz/spinel`** for the compiler surfaces — **all merged**, one
+   reviewable PR at a time: `--emit-rbs` (#1276), `--debug` (#1292),
+   `--emit-types` (#1298), native backtrace (#1300), and FloatArray ops
+   (#1301). Each is opt-in and output-neutral.
 2. **Ship the tools.** `tools/value-bisect` as a `spinel-tools` gem/CLI;
    `tools/ruby-lsp-spinel` published (or path-installed via the project Gemfile).
 3. **Validate at scale.** Run the whole battery on `tep` and `toy` (multi-file,
@@ -142,7 +152,6 @@ compiler already knows*, in the lineage of the merged five:
 
 The cheap, high-leverage items (**A1–A4**, **E1**, **F1**, **F3**) are **done** —
 they multiplied the value of what was already built. What's left, in rough order:
-finish the **F1** upstreaming (`--debug` → `--emit-types` → backtrace), then
 **C3** (the DAP) for IDE users — the single biggest remaining unlock — with
 **B** (interactive `spinel debug/explain/lint`), **D** (Steep/Sorbet wiring), and
 **E2/E3** as the follow-on polish.

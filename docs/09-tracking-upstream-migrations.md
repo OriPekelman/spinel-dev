@@ -1,10 +1,10 @@
 # Helping downstream projects move with spinel master
 
-> **Status: partly implemented.** Motivated by absorbing the matz/spinel **Ruby→C
+> **Status: implemented & validated.** Motivated by absorbing the matz/spinel **Ruby→C
 > compiler rewrite** (the `f6d5eef..b60fbd7` wave, 763 commits, June 2026). This
 > doc generalizes that experience into reusable tooling so toy / tep / spinelgems
 > can track a fast-moving `matz/master` without each one re-deriving the same
-> migration archaeology by hand. **All four tools are now built**:
+> migration archaeology by hand. **All four tools are now built and validated**:
 > `spinel-migrate` + `spinel-gate-bisect` ([`tools/migrate/`](../tools/migrate/)),
 > `spinel-probe` ([`tools/probe/`](../tools/probe/)), and `spinel-reduce-project`
 > ([`tools/reduce/`](../tools/reduce/)).
@@ -29,10 +29,13 @@ distinct kinds of break*, and absorbing it took a full session of manual work:
    normal codegen run; on the C compiler it's an *emit-only* mode that writes an
    empty `.c`. Two perf tools silently broke on it.
 4. **Parity gaps, surface-dependent.** The C compiler fixed our whole #11–#14 bug
-   family — but isn't yet at toy-parity: serve/eval fail with *new* codegen gaps
-   (`$stderr.puts` malformed C, `Array.new(n,<float>)` mistyped, …), and they only
-   reproduce on the **full** compilation surface, not isolated probes (the
-   recurring "f7ae245 signature").
+   family — and *at the time of the rewrite* wasn't yet at toy-parity: serve/eval
+   failed with *new* codegen gaps (`$stderr.puts` malformed C, `Array.new(n,<float>)`
+   mistyped, …) that only reproduced on the **full** compilation surface, not
+   isolated probes (the recurring "f7ae245 signature"). Those hard compiler
+   blockers have since been fixed upstream (serve codegen matz#1434,
+   yield-self-method return-type matz#1446, train `get_rows` OOB matz#1473);
+   remaining toy/tep work is the mechanical tep release (pg opt-in via tep#222).
 
 None of this was knowable without building master and running the project's real
 targets through it. That manual probe — *compile each target on the old pin and
@@ -41,7 +44,13 @@ is the work worth tooling. spinel-dev's role is quietly shifting from "DX toolin
 to **the absorption layer between a fast-moving compiler and the apps on top of
 it**; these tools make that role first-class.
 
-## Proposed tools
+> **Relation to upstream.** matz/spinel now ships first-party
+> `spinel-doctor`/`reduce`/`flatten` (we contributed matz#1476, #1482). spinel-dev
+> is the **differential / migration / perf layer on top** — not a parallel
+> reimplementation. Where the tools below "reuse" reduce/flatten primitives, that
+> means the upstream-or-vendored first-party primitives, not a fork of them.
+
+## The tools (all built)
 
 ### 1. `spinel-migrate` — the parity probe (highest leverage) · **built**
 
@@ -130,7 +139,7 @@ Reuses: `spinel-reduce`'s ddmin + block logic, `spinel-flatten`'s require-graph
 DFS. New: the real-build oracle, file-granularity reduction, in-place mutate
 with restore-on-exit.
 
-## Suggested order
+## Build order (as shipped)
 
 1. **`spinel-probe`** — small, unblocks the others, retires the version-guard
    class of bug for good.
@@ -151,7 +160,9 @@ would let migrate attribute refusals as precisely as it attributes `cc` errors.
 ## Cross-references
 
 - The rewrite-absorption work that motivated this: spinel-dev#14 (closed),
-  #24/#25 (remaining C-compiler toy-parity gaps), matz/spinel#1369 (closed),
+  #24/#25 (the C-compiler toy-parity gaps — the compiler side is now resolved
+  upstream, matz#1434/#1446/#1473; what remains is tracking the mechanical tep
+  release, tep#222), matz/spinel#1369 (closed),
   the `regression/absorbed-by-c-rewrite/` corpus.
 - Tool substrate: [03](03-tooling-for-contributors-and-agents.md) (doctor +
   bisect), [05](05-tooling-surfaces-and-roadmap.md) (roadmap; this extends

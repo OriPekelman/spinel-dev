@@ -1,11 +1,13 @@
 # Packaging proposal — how the tools ship
 
-> Status: **proposal, not published.** We don't cut releases until the compiler
-> surfaces the tools depend on (`--debug`, `--emit-rbs`, `--emit-types`, native
-> backtrace) land in `matz/spinel` — publishing now would pin users to the
-> `feat/typing` fork and to a flag/JSON API that may change in review. This doc
-> fixes the *boundaries* so the split is concrete and consumers (e.g. spinelgems'
-> Localizer) can target stable names.
+> Status: **proposal, gemspecs scaffolded & `gem build`-clean, not yet
+> published.** The compiler surfaces the tools depend on (`--debug`, `--emit-rbs`,
+> `--emit-types`, native backtrace) have **now merged into `matz/spinel`**, so the
+> upstream gate is cleared — a release can target upstream rather than the
+> `feat/typing` fork. The remaining gates are the `spinel-engine` resolver
+> decision and freezing the `--emit-types` JSON shape. This doc fixes the
+> *boundaries* so the split is concrete and consumers (e.g. spinelgems' Localizer)
+> can target stable names.
 
 ## Principle: compiler features upstream, harness as gems
 
@@ -53,6 +55,13 @@ Driven by **who consumes what** (different audiences/deps → separate gems):
 - Kept separate from `spinel-bisect` precisely so consumers who want *only* the
   bisector (spinelgems) don't pull doctor's orchestration. doctor is the
   opinionated front-end; bisect is the engine.
+- **Re-scope (2026-06).** Upstream matz/spinel now ships a **first-party
+  `spinel-doctor`** (we contributed matz#1476/#1482), so the one-shot health
+  check is owned upstream. spinel-dev shouldn't re-ship a competing
+  `spinel-doctor` name; this layer's distinct value is the **differential
+  bisector** (`spinel-bisect`) plus the migration/perf tooling on top of the
+  upstream doctor — not a parallel one-shot. Package accordingly: keep
+  `spinel-bisect` as the engine and let the upstream tool own the front-end.
 
 ## Cross-cutting concerns
 

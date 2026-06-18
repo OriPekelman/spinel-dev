@@ -5,6 +5,11 @@ facts. They are collected here once so the rest doesn't have to re-litigate
 them. All of these were confirmed against the `matz/spinel` checkout, not
 assumed.
 
+> **Note:** the compiler has since been rewritten Ruby→C (`src/*.c` →
+> `bin/spinel`). The constraints below still hold, but internals references
+> naming `spinel_analyze.rb` / `spinel_codegen.rb` now describe the **legacy**
+> Ruby oracle, not the authoritative C compiler.
+
 ## 1. No VM, no runtime object model, no uniform `VALUE`
 
 Spinel does whole-program type inference and lowers Ruby to **native C types**:
@@ -58,13 +63,14 @@ static inline mrb_int sp_add(mrb_int lv_a, mrb_int lv_b) {
 Methods → `sp_<name>`, locals → `lv_<name>`. A native debugger sees recognizable
 symbols and recognizable local names.
 
-## 5. ...but no `#line` directives and no source map
+## 5. `#line` directives and source mapping — SHIPPED
 
-`grep -c '#line' spinel_codegen.rb` → `0`. There is no DWARF mapping from the
-generated `.c` back to the `.rb`. A debugger today lands you in generated C, not
-your Ruby. **The analyzer does carry Prism node line/column locations**, so the
-raw material to emit `#line N "app.rb"` exists — it's just not wired up. This is
-the single highest-leverage debuggability gap.
+`grep -c '#line'` in codegen now returns nonzero: Spinel stamps `#line N
+"app.rb"` before each statement **by default** (`--line-map`; opt out with
+`--no-line-map`). C compile errors map back to Ruby source lines, and `--debug`
+(`-g -O0`, non-inlined) gives faithful `gdb`/`lldb` stepping through Ruby.
+The analyzer carries the Prism node line/column locations this rests on. This
+was formerly the single highest-leverage debuggability gap; it is now **closed**.
 
 ## 6. FFI is outward-only; output is always a whole program with `main()`
 
@@ -90,9 +96,12 @@ the latter is a research project. Doc 02 takes the former.
 
 ## 8. Inference already produces a per-node type cache, and reads/writes RBS
 
-`spinel_analyze` serializes a per-AST-node inferred-type cache into the IR, and
-the toolchain already *consumes* RBS (`spinel_rbs_extract`, `--rbs DIR`).
+The analyzer (the legacy module was `spinel_analyze`) serializes a per-AST-node
+inferred-type cache into the IR, and the toolchain already *consumes* RBS
+(`spinel_rbs_extract`, `--rbs DIR`).
 
-Consequence: two of the most useful tooling features below are mostly *plumbing
-over data that already exists* — exporting inferred types as RBS, and surfacing
-them in an editor (doc 01). And RBS is the natural boundary contract for doc 02.
+Consequence: exporting inferred types is no longer future plumbing — it **ships
+today**. `--emit-rbs` writes inferred sigs to `.rbs`, and `--emit-types` writes
+per-position inferred types plus degrade diagnostics as JSON; `--emit-symbol-map`
+attributes C symbols back to Ruby. Surfacing those in an editor (doc 01) is the
+remaining net-new work. And RBS is the natural boundary contract for doc 02.

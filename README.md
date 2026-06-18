@@ -12,6 +12,13 @@ that motivated it.
 > [Compiler surfaces](#compiler-surfaces-upstreaming)). Everything is opt-in /
 > debug-gated; non-debug release output is byte-for-byte unchanged. The design
 > docs remain as the rationale and open-discussion surface — treat them as RFCs.
+>
+> Upstream now ships its own first-party `tools/` (`spinel-doctor`,
+> `spinel-reduce`, `spinel-flatten`), so spinel-dev's role has narrowed to the
+> **differential / migration / perf layer on top**: value-bisect,
+> `spinel-reduce-project`, `spinel-gate-bisect`, `spinel-migrate` / `-probe`,
+> the perf / flamegraph tools, and `doctor.sh`'s deep legs (which delegate the
+> basic checks to upstream `spinel-doctor` when present).
 
 ## The tools
 
@@ -23,9 +30,13 @@ Jump to [Getting started](#getting-started) for hands-on usage.
 ### `spinel doctor` — one-shot health check
 [`tools/doctor/`](tools/doctor/) · `doctor.sh [--json] [--no-bisect] <program.rb>`
 
-Six escalating checks in one command: an **ignored `require`** (the prime suspect
-for an emit-0 cascade — a wrong path silently unloads a whole module), the
-**compile** probe (calls that emit `0`), the **inference** scan (methods widened
+Six escalating checks in one command — it delegates the basic legs to upstream's
+first-party `spinel-doctor` when it's on `PATH` and layers the deep differential
+legs on top: an **ignored `require`** (the prime suspect for a silent-degrade
+cascade — a wrong path silently unloads a whole module), the **compile** probe
+(an unsupported call hard-errors `spinel: unsupported …`; a dynamic-receiver call
+can silently degrade to nil/0, surfaced by `SPINEL_WARN_UNRESOLVED`), the
+**inference** scan (methods widened
 to `untyped`), an **inference↔codegen disagreement** (inference resolves a method
 but codegen emits-0 — the static silent-miscompile fingerprint), a **codegen**
 build check (`cc -c` the emitted C — catches what analysis misses, like a Class
@@ -34,14 +45,16 @@ boxed as int), and the **behavior** diff vs CRuby. Verdict from `clean` to
 of known degrades, non-zero exit on a *new* degrade, a disagreement, a codegen
 error, or a miscompile.
 
-### `spinel-reduce` / `spinel-flatten` / `spinel-reduce-project` — minimal repro from a degrade
+### `spinel-reduce` / `spinel-reduce-project` — minimal repro from a degrade
 [`tools/reduce/`](tools/reduce/) · `spinel-reduce.rb [--target SUBSTR] <degrading.rb>`
 
 Delta-debugs a degrading program to its **minimal trigger** (ddmin with `doctor
 --json` as the oracle): keep removing code while the target finding still
-reproduces; what survives is the cause. `spinel-flatten` inlines a gem's
-`require_relative` graph into one file first, so `spinel-flatten smoke.rb | …`
-turns a real gem's failing smoke into a minimal bug report automatically.
+reproduces; what survives is the cause. Flattening — inlining a gem's
+`require_relative` graph into one file first, so a real gem's failing smoke
+becomes a minimal bug report automatically — is now upstream's first-party
+`spinel-flatten`; spinel-dev's `spinel-flatten.rb` is **deprecated** (upstream
+supersedes it).
 
 `spinel-reduce-project` handles the case single-file ddmin can't: a
 **surface-dependent** miscompile where an isolated probe compiles but the full
@@ -158,7 +171,7 @@ with `SPINEL_DIR` (defaults to `~/sites/spinel`). The bisector also needs
 `python3` + `lldb`.
 
 ```sh
-git clone https://github.com/matz/spinel && cd spinel && make all   # or your checkout
+git clone https://github.com/matz/spinel && cd spinel && make all   # builds the C compiler → bin/spinel (./spinel symlink); legacy/ is separate (make legacy)
 export SPINEL_DIR=$PWD
 git clone https://github.com/OriPekelman/spinel-dev && cd spinel-dev
 ```
@@ -167,8 +180,8 @@ git clone https://github.com/OriPekelman/spinel-dev && cd spinel-dev
 
 ```sh
 sh tools/doctor/doctor.sh app.rb
-#  compile    ⚠ 1 unresolved call(s) — Spinel silently emits 0:
-#               - cannot resolve call to 'delete_at' on float_array (emitting 0)
+#  compile    ⚠ 1 silent degrade — dynamic-receiver call lowered to nil/0 (SPINEL_WARN_UNRESOLVED):
+#               - app.rb:12: warning: unresolved call 'each' on int receiver -> nil
 #  inference  ⚠ 3 method(s) widened to untyped (slow path / inference gap)
 #  behavior   ✓ matches CRuby (value-bisection)
 #  verdict    degrades
@@ -242,9 +255,11 @@ The tools rely on a few opt-in, output-neutral compiler hooks. These landed in
 
 ## Sibling projects
 
-- **[matz/spinel](https://github.com/matz/spinel)** — the AOT compiler
-  (`spinel_parse` → `spinel_analyze` → `spinel_codegen` → C → native). Self-hosting;
-  whole-program inference; native C value model (no `VALUE`, no VM, no `eval`).
+- **[matz/spinel](https://github.com/matz/spinel)** — the AOT compiler. Now a
+  hand-written C compiler (`src/*.c` → `bin/spinel`); the self-hosted Ruby
+  pipeline (`spinel_parse` → `spinel_analyze` → `spinel_codegen`) is retained
+  under `legacy/` as a parity oracle only. Whole-program inference; native C
+  value model (no `VALUE`, no VM, no `eval`).
 - **[spinelgems](https://github.com/OriPekelman/spinelgems)** (`bundler-spinel`) —
   dependency gating + the vendor flow that links C extensions *into* a Spinel
   binary, plus the `verified` differential harness (which calls value-bisect).

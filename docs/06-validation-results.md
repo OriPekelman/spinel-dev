@@ -6,12 +6,20 @@
 > they (and Spinel's inference) fall short. Run on gx10 (aarch64-Linux), Spinel
 > fork `feat/typing`, 2026-06-01/02.
 
+> **⚠ Historical snapshot.** These results were measured *pre-C-rewrite* on the
+> `feat/typing` legacy (Ruby) compiler (2026-06-01/02). The compiler is now
+> hand-written C, and the error model plus several blocker statuses have changed
+> since (see [09](09-tracking-upstream-migrations.md)). This doc is retained as
+> evidence of tool value, not as a current status report.
+
 ## Summary
 
 - **`--emit-rbs` agrees with hand-written RBS on ~73% of reachable methods**, and
   its disagreements are *systematic and defensible* — not random error.
 - **`doctor` finds real risks on unseen code** (a silent emit-0 in toy's training
-  path; precise `untyped` degrade sites).
+  path; precise `untyped` degrade sites). (The "emit-0" mode named throughout is
+  the legacy emit-0 model; the C compiler now hard-errors or degrades under
+  `SPINEL_WARN_UNRESOLVED` — see [09](09-tracking-upstream-migrations.md).)
 - Both tools independently fingerprint the **same** inference frontier:
   polymorphic / heterogeneous types (subclass slots, `poly` receivers, mixed
   arrays) degrade to `untyped`/`Integer`.
@@ -54,6 +62,9 @@ Static legs ran clean on a never-seen numerical codebase and surfaced:
   `poly` `token_ids` → emits 0 → `t_seq = 0` → embedding gradients silently not
   accumulated. The dangerous "compiled != correct" mode in a *training* path.
   Filed: OriPekelman/toy#32.
+  - **Status (2026-06):** on spinel master this training path is now GREEN — the
+    train regression was fixed upstream (bisected to matz/spinel#1473). toy#32
+    stands as a doctor-CI-gate proposal, not an open compiler blocker.
 - **12 `untyped` degrades**, all on the heterogeneous/`poly` first-args of the
   backward/decode methods — the same fingerprint as ①.
 
@@ -120,4 +131,6 @@ materially widen value-bisect's reach. See spinel-dev#4.
 - spinel-dev#2 — native backtrace name/file cosmetics.
 - spinel-dev#3 — null-receiver crash blind spot.
 - OriPekelman/toy#32 — guard poly-degradation in numerical paths (doctor CI gate).
+  As of 2026-06 the underlying train path is GREEN on master (fixed upstream,
+  matz/spinel#1473); this remains as a CI-gate proposal, not an open blocker.
 - OriPekelman/tep#186 — the #1259 fix (uninitialized `@openai_events`).

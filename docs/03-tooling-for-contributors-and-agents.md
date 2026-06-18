@@ -36,18 +36,20 @@ analyzer emit modes, a wrapper flag set) was worth exercising on real apps
 | **value-bisect** harness + **triage** | *where* a compiled binary first diverges from CRuby (var/line) or crashes | CRuby is a ready-made oracle (the `verified` rung formalizes this) |
 | `spinel --emit-rbs` | inferred signatures as RBS; `untyped` marks the degraded slow path | whole-program inference already computes them |
 | `spinel --emit-types` + ruby-lsp addon | inferred type on hover; degrade warnings | per-node type cache already serialized to the IR |
-| **`spinel doctor`** (+ `doctor-gate`) | one report: ignored requires, emit-0s, widened slots, inference↔codegen **disagreements**, **codegen** build failures, behavior diff — and a CI gate over it | composes the legs above; the disagree/codegen legs need no new compiler work |
-| **`spinel-reduce`** (+ `spinel-flatten`) | the **minimal trigger** for any doctor finding (ddmin); `flatten` inlines a gem's require graph first | doctor's `--json` *is* the oracle — no bespoke reducer per bug class |
+| **`spinel doctor`** (+ `doctor-gate`) | **delegates** basic legs (ignored requires, silent degrades via `SPINEL_WARN_UNRESOLVED`, hard `unsupported` errors, widened slots) to upstream's first-party `spinel-doctor` when present, and **layers differential legs**: inference↔codegen **disagreements**, symbol-map attribution (failing C symbol), value-bisection **behavior** diff — plus a CI gate over it | composes the legs above; the differential legs need no new compiler work |
+| **`spinel-reduce`** (+ `spinel-flatten`) | the **specialized** reducer layer: shrinks against doctor's **semantic findings** (inference↔codegen disagreement, widened slot, failing C symbol) plus `--shrink-ints` and single-sided FFI `--no-cruby` (ddmin) | doctor's `--json` *is* the oracle — no bespoke reducer per bug class. `spinel-flatten` is **DEPRECATED** — upstream ships a first-party `spinel-flatten`; ours is a no-build fallback |
 | **`tools/perf/`** (`spinel-perf`, `spinel-flamegraph`, `speedup-estimate`, `rbs-disagree`) | "would it be faster / why slow": hot lines + GC-vs-user split, Ruby-demangled flamegraphs, a static port estimate, inferencer-disagreement coordinates | the same inference + `#line` substrate, pointed at speed |
 
 The first four — plus doctor's behavior leg — attack the failure mode
 `spinelgems`' ARCHITECTURE.md calls the dangerous one — the **silent miscompile**:
 "it compiled" ≠ "it works", no warning. A native debugger doesn't help with those
 (they aren't crashes); making the compiler's analysis and the CRuby differential
-*visible* does. doctor's `disagree` and `codegen` legs extend that to the
-*static* silent-miscompile fingerprint and to C-build failures that the analysis
-legs alone read as "clean"; `spinel-reduce` shrinks any of them to a minimal
-repro. (Tool detail: each tool's own README; the perf write-up is
+*visible* does. doctor's **differential** legs — `disagree`, `codegen`, and the
+value-bisection `behavior` leg — are the spinel-dev value-add layered over
+upstream `spinel-doctor`'s basic legs: they extend that to the *static*
+silent-miscompile fingerprint, to the C-build failures that the analysis legs
+alone read as "clean", and to the runtime CRuby diff; `spinel-reduce` shrinks any
+of them to a minimal repro. (Tool detail: each tool's own README; the perf write-up is
 [08-perf-analysis](08-perf-analysis.md).)
 
 ## Proof of value (runs you can reproduce)
@@ -92,8 +94,11 @@ see the commit log.)
 
 ### 3. See a degrade the compiler is hiding
 
-Where Spinel *can't* compile a call it prints `cannot resolve call to 'X'
-(emitting 0)` and degrades. The typing tools make that visible *before* you run:
+Where the (hand-written C) Spinel *can't* compile a call it does one of two
+things: it **hard-errors** (`spinel: unsupported ...`, emitting no C), or it
+**silently degrades** a dynamic-receiver call to `nil`/`0` — the latter surfaced
+per site (file:line) by `SPINEL_WARN_UNRESOLVED`. The typing tools make the
+silent case visible *before* you run:
 
 ```sh
 spinel app.rb --emit-rbs        # a poly-widened method -> `def f: (untyped) -> untyped # spinel: widened to untyped (slow path)`
@@ -151,12 +156,15 @@ tools/value-bisect/bisect.sh app.rb [-- args]      # exit 1 = divergence
 tools/value-bisect/triage.sh --failing             # triage the test suite
 SPINEL_INT_OVERFLOW=wrap tools/value-bisect/bisect.sh app.rb   # pick the mode
 
-# One-shot risk report + CI gate (this repo)
-tools/doctor/doctor.sh [--json] [--no-cruby] app.rb   # require/compile/inference/disagree/codegen/behavior
+# One-shot risk report + CI gate (this repo; upstream ships first-party `spinel-doctor` —
+# this is the differential variant, delegating basic legs to it when present)
+tools/doctor/doctor.sh [--json] [--no-bisect] [--no-cruby] [--no-upstream] app.rb   # require/compile/inference/disagree/codegen/behavior
 ruby tools/doctor/doctor-gate.rb --github             # CI: fail on a new degrade/disagreement/codegen error
 
-# Minimal repro from a degrade (this repo)
-ruby tools/reduce/spinel-flatten.rb smoke.rb -o flat.rb            # inline a gem's require graph
+# Minimal repro from a degrade (this repo; doctor/reduce/flatten now have first-party
+# upstream equivalents — these are the differential/specialized variants or fallbacks)
+spinel-flatten smoke.rb -o flat.rb                                 # upstream first-party: inline a gem's require graph
+ruby tools/reduce/spinel-flatten.rb smoke.rb -o flat.rb           # DEPRECATED no-build fallback for the above
 ruby tools/reduce/spinel-reduce.rb --target sp_box_int flat.rb     # ddmin to the minimal trigger
 
 # Performance (this repo)

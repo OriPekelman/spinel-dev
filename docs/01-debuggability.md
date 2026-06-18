@@ -68,26 +68,24 @@ ruby-lsp. The *interesting* part is making it Spinel-aware (below).
 
 ## What's cheap to build (binary-side + Spinel-aware), ranked by leverage
 
-### 1. `#line` directives → step through Ruby source in gdb/lldb  ★ do this first
+### 1. `#line` directives → step through Ruby source in gdb/lldb  ✓ SHIPPED
 
-The single biggest win and genuinely small. The analyzer already carries Prism
-node locations (constraint 5); emit `#line N "app.rb"` before each statement and
-compile with `-g`. The C toolchain then produces DWARF that maps to **Ruby
-source lines**. Combined with the existing `sp_<name>` / `lv_<name>` naming
-(constraint 4), `gdb`/`lldb` immediately give you:
+This shipped and is no longer a deliverable. Spinel stamps `#line N "app.rb"`
+before each statement **by default** (`--line-map`; opt out `--no-line-map`),
+resting on the Prism node locations the analyzer carries (constraint 5). The C
+toolchain then produces DWARF that maps to **Ruby source lines**. Combined with
+the existing `sp_<name>` / `lv_<name>` naming (constraint 4), `--debug` + the
+default-on line map let `gdb`/`lldb`:
 
-- breakpoints by Ruby line (`break app.rb:42`),
+- break by Ruby line (`break app.rb:42`),
 - `print lv_c` to inspect a Ruby local,
-- native backtraces of compiled frames,
-- watchpoints, stepping, reverse-debugging (rr), Time-Travel.
+- show native backtraces of compiled frames,
+- watch, step, reverse-debug (rr), Time-Travel.
 
-Scope: a `--debug` / `-g` driver mode (`-g -O0` + `#line` emission). Estimated a
-few hundred lines in `spinel_codegen.rb` plus the `spinel` wrapper. **This is
-the recommended first concrete deliverable.**
-
-Caveat: at `-O2` the C compiler reorders/inlines and DWARF gets lossy, so
-`--debug` should drop to `-O0` (and disable Spinel's own `static inline`
-promotion) for faithful stepping.
+`--debug` builds `-g -O0` and disables Spinel's own `static inline` promotion
+for faithful stepping (`-g` alone adds debug info without forcing `-O0`); at
+`-O2` the C compiler reorders/inlines and DWARF gets lossy, which is why
+`--debug` drops the optimization.
 
 ### 2. Opt-in shadow call stack → restore `backtrace` / `caller`
 
@@ -98,17 +96,17 @@ behind the debug build because it adds per-call overhead. Medium effort;
 restores the most-missed Ruby debugging affordance and makes exception output
 actually useful.
 
-### 3. Export inference results as RBS
+### 3. Export inference results as RBS  ✓ SHIPPED
 
 The analyzer computes per-node inferred types and already reads RBS (constraint
-8). Run it backwards: emit `sig/*.rbs` for the whole program. Benefits:
+8). Run backwards, this now **ships**: `--emit-rbs` writes `sig/*.rbs` for the
+whole program, and `--emit-types` writes per-position inferred types plus
+degrade diagnostics as JSON. Benefits, now realized:
 
 - feeds Steep / ruby-lsp / Sorbet with ground-truth signatures,
 - doubles as a **miscompile diagnostic** — you can *see* where a param widened
   to `poly` (the slow path) or where a type came out wrong,
 - closes the loop with constraint 8's existing RBS-in path.
-
-Modest effort (the data is already serialized to IR; this is a new emitter).
 
 ### 4. Spinel-aware LSP addon — the "auto LSP" worth wanting
 
@@ -123,12 +121,16 @@ that cache can surface, on hover / as diagnostics:
 - **"this call degrades to a no-op / can't be resolved"** — the scariest case.
 
 That last one matters most. `spinelgems`' architecture doc names the central
-danger explicitly: **silent miscompiles** — `eval` → "emitting 0", local-var-name
-collapse, Int-0-as-nil — where "it compiled" ≠ "it works" and no warning fires.
-A static linter (`rubocop_spinel`) catches *some* of this at author time, but
-only the compiler's own inference knows when a *specific call site* degraded.
-Surfacing that in the editor is a uniquely-Spinel tool and mostly plumbing over
-existing data.
+danger explicitly: **silent miscompiles** — where "it compiled" ≠ "it works".
+The "emitting 0" framing is the **legacy** behavior; the C compiler now either
+**hard-errors** (`spinel: unsupported ...`, no C emitted) or silently lowers an
+unresolved dynamic-receiver call (or `.new` on an unresolved constant) to
+`nil`/`0`. That residual silent path is surfaced by `SPINEL_WARN_UNRESOLVED`
+(file:line per site), so "no warning fires" is no longer unconditional. A static
+linter (`rubocop_spinel`) catches *some* of this at author time, but only the
+compiler's own inference knows when a *specific call site* degraded. Surfacing
+that in the editor is a uniquely-Spinel tool and mostly plumbing over existing
+data.
 
 This is the most interesting thing to build after `#line`.
 
@@ -143,20 +145,34 @@ Lean on the CRuby dual-run for all of these.
 
 ## Recommended sequencing
 
-1. `#line` + `--debug` mode (native debugger steps through Ruby). ← start here
-2. Spinel-aware ruby-lsp addon surfacing inferred types + degrade warnings.
-3. RBS export from inference (feeds #2 and external type checkers).
-4. Opt-in shadow call stack for `backtrace`/`caller`.
+Two of the original items have shipped upstream; the ranking below covers the
+remaining net-new work:
 
-(1) and (4) are compiler changes (PRs against `matz/spinel`); (2) and (3) can
-live as standalone tools — (3) arguably belongs in `spinelgems`' orbit since it
-already speaks RBS and ledgers.
+- ✓ **SHIPPED:** `#line` + `--debug` mode (native debugger steps through Ruby).
+- ✓ **SHIPPED:** RBS export from inference (`--emit-rbs`; `--emit-types` JSON),
+  feeding external type checkers.
+
+Remaining, re-ranked:
+
+1. Spinel-aware ruby-lsp addon surfacing inferred types + degrade warnings,
+   reading the `--emit-types` JSON (which already carries the degrade
+   diagnostics).
+2. Opt-in shadow call stack for `backtrace`/`caller` — note native
+   `Exception#backtrace` + `Kernel#caller` are now wired upstream (#1300), so
+   this is largely subsumed.
+
+(2)'s compiler-side piece landed in `matz/spinel`; (1) can live as a standalone
+tool, and arguably belongs in `spinelgems`' orbit since it already speaks RBS
+and ledgers.
 
 ## Honest note
 
 `spinelgems` is organized around the premise that the dangerous failure mode is
-the *silent* one. That's the strongest argument for prioritizing the
-inference-export / Spinel-aware-LSP work (items 3–4 above) over a fancier
-runtime debugger: the bugs that hurt aren't crashes you can catch in gdb, they're
-correct-looking binaries that quietly do the wrong thing. Tooling that makes the
-compiler's analysis *visible* attacks that directly; a runtime debugger doesn't.
+the *silent* one. That's the strongest argument for prioritizing inference-export
+/ Spinel-aware-LSP work over a fancier runtime debugger: the bugs that hurt
+aren't crashes you can catch in gdb, they're correct-looking binaries that
+quietly do the wrong thing. The conclusion holds — and is now realized by the
+differential/migration layer on top of upstream's first-party tools: doctor's
+`SPINEL_WARN_UNRESOLVED` scan, `--emit-types` degrade diagnostics, and
+value-bisection all make the compiler's analysis *visible*. A runtime debugger
+doesn't.
