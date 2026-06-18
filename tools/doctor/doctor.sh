@@ -33,7 +33,13 @@
 #                        miscompiles emit no warning, so only this catches them.)
 #
 # Usage:
-#   doctor.sh [--json] [--no-bisect] [--no-cruby] <program.rb> [-- program-args...]
+#   doctor.sh [--json] [--no-bisect] [--no-cruby] [--no-upstream] <program.rb> [-- program-args...]
+#
+# When the first-party `spinel-doctor` (matz/spinel f3bb9af9+) is found
+# ($SPINEL_DOCTOR, $SPINEL_DIR/build/spinel-doctor, or on PATH), the human report
+# delegates the basic legs to it (no drift) and layers our differential legs on
+# top. --no-upstream forces the full standalone battery. JSON mode is always
+# standalone (it is the spinel-reduce oracle contract).
 #
 # --no-cruby: single-sided behavior leg — for FFI / AOT-only apps (tep, toy) that
 # can't run under CRuby. The behavior leg then reports "ran clean" / "crash"
@@ -48,11 +54,13 @@ BISECT="$HERE/../value-bisect/bisect.sh"
 JSON=0
 DO_BISECT=1
 NOCRUBY_FLAG=""
+NO_UPSTREAM=0
 while :; do
   case "$1" in
-    --json)      JSON=1; shift ;;
-    --no-bisect) DO_BISECT=0; shift ;;
-    --no-cruby)  NOCRUBY_FLAG="--no-cruby"; shift ;;  # single-sided behavior leg
+    --json)        JSON=1; shift ;;
+    --no-bisect)   DO_BISECT=0; shift ;;
+    --no-cruby)    NOCRUBY_FLAG="--no-cruby"; shift ;;  # single-sided behavior leg
+    --no-upstream) NO_UPSTREAM=1; shift ;;  # force full standalone (don't delegate basic legs)
     *) break ;;
   esac
 done
@@ -66,6 +74,22 @@ SPINEL="$SPINEL_DIR/spinel"
 if [ ! -x "$SPINEL" ]; then
   echo "doctor: $SPINEL not found (set SPINEL_DIR)" >&2; exit 2
 fi
+
+# Upstream first-party spinel-doctor (matz/spinel f3bb9af9+) covers the basic legs
+# (build / unsupported / unresolved / requires / inference). When it's available,
+# delegate those to it -- single source of truth, no drift -- and layer our
+# differential legs (disagreement, codegen symbol-map attribution, value-bisection
+# behavior) on top. JSON mode always runs the full standalone battery: it is the
+# spinel-reduce oracle contract and must keep emitting our fields. --no-upstream
+# forces full standalone in human mode too.
+UP_DOCTOR=""
+if [ "$NO_UPSTREAM" -eq 0 ]; then
+  if [ -n "$SPINEL_DOCTOR" ] && [ -x "$SPINEL_DOCTOR" ]; then UP_DOCTOR="$SPINEL_DOCTOR"
+  elif [ -x "$SPINEL_DIR/build/spinel-doctor" ]; then UP_DOCTOR="$SPINEL_DIR/build/spinel-doctor"
+  else w="$(command -v spinel-doctor 2>/dev/null)"; [ -n "$w" ] && UP_DOCTOR="$w"; fi
+fi
+DELEGATE=0
+[ -n "$UP_DOCTOR" ] && [ "$JSON" -eq 0 ] && DELEGATE=1
 
 WORK="$(mktemp -d /tmp/spinel_doctor.XXXXXX)"
 trap 'rm -rf "$WORK"' EXIT
@@ -334,6 +358,12 @@ fi
 
 # Human report.
 printf 'spinel doctor: %s\n' "$SRC"
+if [ "$DELEGATE" -eq 1 ]; then
+  # Basic legs: defer to the first-party spinel-doctor (single source of truth).
+  printf '  basic legs ↓ first-party spinel-doctor (%s)\n' "$UP_DOCTOR"
+  SPINEL="$SPINEL" "$UP_DOCTOR" "$SRC" 2>&1 | sed 's/^/    /'
+  printf '  ── differential legs (spinel-dev) ──\n'
+else
 if [ "$N_PARSE" -gt 0 ]; then
   printf '  parse      ✗ spinel could not parse this file (%s error(s)) — its Prism subset\n' "$N_PARSE"
   printf '             rejects some syntax here; every check below is moot until this is fixed:\n'
@@ -361,6 +391,10 @@ if [ "$N_SILENT_DEGRADE" -gt 0 ]; then
   printf '             nil/0 where CRuby would raise (some may be deliberate dead/inert paths):\n'
   printf '%s\n' "$SILENT_DEGRADE" | head -10 | sed 's/^/               - /'
 fi
+fi  # end basic-legs (delegated to upstream spinel-doctor, or printed standalone)
+# inference — always shown. Upstream gains this leg via matz/spinel#1476; until a
+# spinel-doctor carrying it is on PATH, show it here so delegated mode keeps the
+# widened-to-untyped detail (the verdict already reflects it either way).
 if [ "$N_DEGRADED" -gt 0 ]; then
   printf '  inference  ⚠ %s method(s) widened to untyped (slow path / inference gap):\n' "$N_DEGRADED"
   printf '%s\n' "$DEGRADED" | sed 's/^/               - /'
