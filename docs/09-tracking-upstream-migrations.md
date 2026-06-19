@@ -34,8 +34,12 @@ distinct kinds of break*, and absorbing it took a full session of manual work:
    mistyped, …) that only reproduced on the **full** compilation surface, not
    isolated probes (the recurring "f7ae245 signature"). Those hard compiler
    blockers have since been fixed upstream (serve codegen matz#1434,
-   yield-self-method return-type matz#1446, train `get_rows` OOB matz#1473);
-   remaining toy/tep work is the mechanical tep release (pg opt-in via tep#222).
+   yield-self-method return-type matz#1446). The train `get_rows` OOB
+   (matz#1449, spinel-dev#31) is **not** durably fixed — it's a layout-sensitive,
+   non-deterministic memory bug that flips PASS↔ABORT across rebuilds (an earlier
+   "fixed by #1473" read was sampling noise). Remaining toy/tep work: the
+   mechanical tep release (pg opt-in via tep#222) for serve, and matz#1449 for
+   the training surface (until then training stays on the byte-exact legacy pin).
 
 None of this was knowable without building master and running the project's real
 targets through it. That manual probe — *compile each target on the old pin and
@@ -160,9 +164,10 @@ would let migrate attribute refusals as precisely as it attributes `cc` errors.
 ## Cross-references
 
 - The rewrite-absorption work that motivated this: spinel-dev#14 (closed),
-  #24/#25 (the C-compiler toy-parity gaps — the compiler side is now resolved
-  upstream, matz#1434/#1446/#1473; what remains is tracking the mechanical tep
-  release, tep#222), matz/spinel#1369 (closed),
+  #24/#25 (the C-compiler toy-parity gaps — serve/yield resolved upstream,
+  matz#1434/#1446; the train `get_rows` OOB is the open exception, matz#1449 /
+  spinel-dev#31, a flaky layout-sensitive bug). Remaining: the mechanical tep
+  release (tep#222) for serve, matz#1449 for training. matz/spinel#1369 (closed),
   the `regression/absorbed-by-c-rewrite/` corpus.
 - Tool substrate: [03](03-tooling-for-contributors-and-agents.md) (doctor +
   bisect), [05](05-tooling-surfaces-and-roadmap.md) (roadmap; this extends

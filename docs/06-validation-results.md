@@ -62,9 +62,13 @@ Static legs ran clean on a never-seen numerical codebase and surfaced:
   `poly` `token_ids` → emits 0 → `t_seq = 0` → embedding gradients silently not
   accumulated. The dangerous "compiled != correct" mode in a *training* path.
   Filed: OriPekelman/toy#32.
-  - **Status (2026-06):** on spinel master this training path is now GREEN — the
-    train regression was fixed upstream (bisected to matz/spinel#1473). toy#32
-    stands as a doctor-CI-gate proposal, not an open compiler blocker.
+  - **Status (2026-06):** on the C backend this training path is **flaky**, not
+    fixed — a non-deterministic, layout-sensitive `get_rows` OOB
+    (matz/spinel#1449): a fixed binary is consistent (8/8), but rebuilds from
+    identical source + `spinel` flip PASS↔ABORT. (An earlier "fixed by #1473"
+    note was sampling noise — corrected on #1449.) toy training stays on the
+    union/legacy pin, which is byte-exact regardless. toy#32 stands as a
+    doctor-CI-gate proposal.
 - **12 `untyped` degrades**, all on the heterogeneous/`poly` first-args of the
   backward/decode methods — the same fingerprint as ①.
 
@@ -131,6 +135,7 @@ materially widen value-bisect's reach. See spinel-dev#4.
 - spinel-dev#2 — native backtrace name/file cosmetics.
 - spinel-dev#3 — null-receiver crash blind spot.
 - OriPekelman/toy#32 — guard poly-degradation in numerical paths (doctor CI gate).
-  As of 2026-06 the underlying train path is GREEN on master (fixed upstream,
-  matz/spinel#1473); this remains as a CI-gate proposal, not an open blocker.
+  As of 2026-06 the C-backend train path is **flaky**, not fixed — a layout-
+  sensitive `get_rows` OOB (matz/spinel#1449, spinel-dev#31) that flips
+  PASS↔ABORT across rebuilds of identical source. This remains a CI-gate proposal.
 - OriPekelman/tep#186 — the #1259 fix (uninitialized `@openai_events`).
