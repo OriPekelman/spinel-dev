@@ -391,16 +391,15 @@ if [ "$N_SILENT_DEGRADE" -gt 0 ]; then
   printf '             nil/0 where CRuby would raise (some may be deliberate dead/inert paths):\n'
   printf '%s\n' "$SILENT_DEGRADE" | head -10 | sed 's/^/               - /'
 fi
-fi  # end basic-legs (delegated to upstream spinel-doctor, or printed standalone)
-# inference — always shown. Upstream gains this leg via matz/spinel#1476; until a
-# spinel-doctor carrying it is on PATH, show it here so delegated mode keeps the
-# widened-to-untyped detail (the verdict already reflects it either way).
+# inference — standalone only; in delegated mode upstream spinel-doctor shows it
+# (the leg we contributed, matz/spinel#1476, now merged).
 if [ "$N_DEGRADED" -gt 0 ]; then
   printf '  inference  ⚠ %s method(s) widened to untyped (slow path / inference gap):\n' "$N_DEGRADED"
   printf '%s\n' "$DEGRADED" | sed 's/^/               - /'
 else
   printf '  inference  ✓ no methods widened to untyped (%s untyped slots total)\n' "$N_UNTYPED"
 fi
+fi  # end basic-legs (delegated to upstream spinel-doctor, or printed standalone)
 if [ "$N_DISAGREE" -gt 0 ]; then
   printf '  disagree   ✗ %s inference↔codegen DISAGREEMENT(s) — the silent-miscompile fingerprint:\n' "$N_DISAGREE"
   printf '             (inference resolves the method on a user class; codegen lost the receiver and emits 0)\n'
